@@ -13,52 +13,31 @@ import (
 	"github.com/sanskarpan/dht-system/dht-system/internal/transport"
 )
 
+type iterativeRoundResult struct {
+	contact  Contact
+	contacts []Contact
+	entry    *store.ValueEntry
+	err      error
+}
+
 // IterativeFindNode performs the Kademlia iterative node lookup.
 // Returns up to k closest contacts to target, with a hop trace.
 func (n *KademliaNode) IterativeFindNode(ctx context.Context, target NodeID) ([]Contact, []transport.HopEvent, error) {
 	seeds := n.RoutingTable.KClosest(target, n.Config.K)
 
 	roundFn := func(alphaCtx context.Context, batch []Contact, hopIdx int, hops *[]transport.HopEvent) ([]Contact, *store.ValueEntry) {
-		type result struct {
-			contacts []Contact
-			err      error
-		}
-		results := make(chan result, len(batch))
-		var wg sync.WaitGroup
-		for _, c := range batch {
-			wg.Add(1)
-			go func(contact Contact) {
-				defer wg.Done()
-				ref := transport.NodeRef{ID: [20]byte(contact.ID), Addr: contact.Addr}
-				contacts, err := n.Transport.FindNode(alphaCtx, n.Ref(), ref, [20]byte(target))
-				if err != nil {
-					results <- result{err: err}
-					return
-				}
-				var cs []Contact
-				for _, nr := range contacts {
-					cs = append(cs, Contact{ID: NodeID(nr.ID), Addr: nr.Addr, LastSeen: time.Now()})
-				}
-				results <- result{contacts: cs}
-			}(c)
-		}
-		wg.Wait()
-		close(results)
+		results := n.runIterativeRound(batch, target, "kad_batch", hopIdx, hops, func(contact Contact) iterativeRoundResult {
+			ref := transport.NodeRef{ID: [20]byte(contact.ID), Addr: contact.Addr}
+			contacts, err := n.Transport.FindNode(alphaCtx, n.Ref(), ref, [20]byte(target))
+			if err != nil {
+				return iterativeRoundResult{contact: contact, err: err}
+			}
 
-		mechanism := fmt.Sprintf("kad_batch_alpha%d", len(batch))
-		*hops = append(*hops, transport.HopEvent{
-			FromNode:  consistent.IDToHex([20]byte(n.ID)),
-			ToNode:    consistent.IDToHex([20]byte(target)),
-			Mechanism: mechanism,
-			HopIndex:  hopIdx,
+			return iterativeRoundResult{
+				contact:  contact,
+				contacts: nodeRefsToContacts(contacts),
+			}
 		})
-		n.Bus.Publish(events.MakeEvent(events.EventLookupHop, events.LookupHopPayload{
-			FromNode:  consistent.IDToHex([20]byte(n.ID)),
-			ToNode:    consistent.IDToHex([20]byte(target)),
-			Mechanism: mechanism,
-			HopIndex:  hopIdx,
-		}))
-
 		var newContacts []Contact
 		for r := range results {
 			if r.err == nil {
@@ -92,60 +71,42 @@ func (n *KademliaNode) IterativeFindValue(ctx context.Context, key NodeID) (*sto
 	var closestMissSet bool
 
 	roundFn := func(alphaCtx context.Context, batch []Contact, hopIdx int, hops *[]transport.HopEvent) ([]Contact, *store.ValueEntry) {
-		type fvResult struct {
-			contact Contact
-			result  *transport.FindValueResult
-			err     error
-		}
-		resCh := make(chan fvResult, len(batch))
-		var wg sync.WaitGroup
-		for _, c := range batch {
-			wg.Add(1)
-			go func(contact Contact) {
-				defer wg.Done()
-				ref := transport.NodeRef{ID: [20]byte(contact.ID), Addr: contact.Addr}
-				res, err := n.Transport.FindValue(alphaCtx, n.Ref(), ref, [20]byte(key))
-				resCh <- fvResult{contact: contact, result: res, err: err}
-			}(c)
-		}
-		wg.Wait()
-		close(resCh)
-
-		mechanism := fmt.Sprintf("find_value_alpha%d", len(batch))
-		*hops = append(*hops, transport.HopEvent{
-			FromNode:  consistent.IDToHex([20]byte(n.ID)),
-			ToNode:    consistent.IDToHex([20]byte(key)),
-			Mechanism: mechanism,
-			HopIndex:  hopIdx,
+		results := n.runIterativeRound(batch, key, "find_value", hopIdx, hops, func(contact Contact) iterativeRoundResult {
+			ref := transport.NodeRef{ID: [20]byte(contact.ID), Addr: contact.Addr}
+			res, err := n.Transport.FindValue(alphaCtx, n.Ref(), ref, [20]byte(key))
+			if err != nil {
+				return iterativeRoundResult{contact: contact, err: err}
+			}
+			if res.Found {
+				return iterativeRoundResult{
+					contact: contact,
+					entry:   res.Entry,
+				}
+			}
+			return iterativeRoundResult{
+				contact:  contact,
+				contacts: nodeRefsToContacts(res.Contacts),
+			}
 		})
-		n.Bus.Publish(events.MakeEvent(events.EventLookupHop, events.LookupHopPayload{
-			FromNode:  consistent.IDToHex([20]byte(n.ID)),
-			ToNode:    consistent.IDToHex([20]byte(key)),
-			Mechanism: mechanism,
-			HopIndex:  hopIdx,
-		}))
-
 		var newContacts []Contact
-		for r := range resCh {
+		for r := range results {
 			if r.err != nil {
 				continue
 			}
-			if r.result.Found {
+			if r.entry != nil {
 				// Cache on the closest node that missed (use outer ctx, not alphaCtx).
 				if closestMissSet {
 					cacheRef := transport.NodeRef{ID: [20]byte(closestMiss.ID), Addr: closestMiss.Addr}
-					_ = n.Transport.KStore(ctx, n.Ref(), cacheRef, r.result.Entry)
+					_ = n.Transport.KStore(ctx, n.Ref(), cacheRef, r.entry)
 				}
-				return nil, r.result.Entry
+				return nil, r.entry
 			}
 			// Track the closest miss for caching.
 			if !closestMissSet || XORDistance(r.contact.ID, key).Cmp(XORDistance(closestMiss.ID, key)) < 0 {
 				closestMiss = r.contact
 				closestMissSet = true
 			}
-			for _, nr := range r.result.Contacts {
-				newContacts = append(newContacts, Contact{ID: NodeID(nr.ID), Addr: nr.Addr, LastSeen: time.Now()})
-			}
+			newContacts = append(newContacts, r.contacts...)
 		}
 		return newContacts, nil
 	}
@@ -277,6 +238,58 @@ func (n *KademliaNode) iterativeSearch(
 	}
 
 	return nil, Pn, hops, nil
+}
+
+func (n *KademliaNode) runIterativeRound(
+	batch []Contact,
+	target NodeID,
+	mechanismPrefix string,
+	hopIdx int,
+	hops *[]transport.HopEvent,
+	rpc func(contact Contact) iterativeRoundResult,
+) <-chan iterativeRoundResult {
+	results := make(chan iterativeRoundResult, len(batch))
+	var wg sync.WaitGroup
+	for _, c := range batch {
+		wg.Add(1)
+		go func(contact Contact) {
+			defer wg.Done()
+			results <- rpc(contact)
+		}(c)
+	}
+	wg.Wait()
+	close(results)
+
+	n.emitLookupHop(target, fmt.Sprintf("%s_alpha%d", mechanismPrefix, len(batch)), hopIdx, hops)
+	return results
+}
+
+func (n *KademliaNode) emitLookupHop(target NodeID, mechanism string, hopIdx int, hops *[]transport.HopEvent) {
+	hop := transport.HopEvent{
+		FromNode:  consistent.IDToHex([20]byte(n.ID)),
+		ToNode:    consistent.IDToHex([20]byte(target)),
+		Mechanism: mechanism,
+		HopIndex:  hopIdx,
+	}
+	*hops = append(*hops, hop)
+	n.Bus.Publish(events.MakeEvent(events.EventLookupHop, events.LookupHopPayload{
+		FromNode:  hop.FromNode,
+		ToNode:    hop.ToNode,
+		Mechanism: hop.Mechanism,
+		HopIndex:  hop.HopIndex,
+	}))
+}
+
+func nodeRefsToContacts(refs []transport.NodeRef) []Contact {
+	contacts := make([]Contact, 0, len(refs))
+	for _, nr := range refs {
+		contacts = append(contacts, Contact{
+			ID:       NodeID(nr.ID),
+			Addr:     nr.Addr,
+			LastSeen: time.Now(),
+		})
+	}
+	return contacts
 }
 
 // StoreValue stores a key-value pair on the k closest nodes.
