@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  /* ─── Design tokens ─────────────────────────────── */
+  --font-display: 'Barlow Condensed', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+  --color-bg: #050a14;
+  --color-surface: #0d1520;
+  --color-border: #162036;
+  --color-accent: #38bdf8;
+  --color-success: #10b981;
+  --color-warn: #f59e0b;
+  --color-danger: #ef4444;
+
+  font-family: var(--font-display);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: 0.015em;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: #e2e8f0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ─── Dot-grid background ───────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.07) 1px, transparent 0);
+  background-size: 28px 28px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── JetBrains Mono for all monospace elements ─── */
+.font-mono, code, pre, kbd {
+  font-family: var(--font-mono) !important;
+}
+
+/* ─── Custom scrollbar ──────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+/* ─── Animations ────────────────────────────────── */
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(110%); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in {
+  animation: slide-in 0.25s ease-out forwards;
+}
+
+@keyframes conn-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+.animate-conn-pulse {
+  animation: conn-pulse 2s ease-in-out infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out forwards;
+}
+
+/* ─── Input range track ─────────────────────────── */
+input[type='range'] {
+  accent-color: #38bdf8;
+}
