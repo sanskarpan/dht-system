@@ -1,0 +1,71 @@
+syntax = "proto3";
+package dht;
+
+option go_package = "github.com/sanskarpan/dht-system/dht-system/proto/gen";
+
+// NodeInfo represents a reference to a DHT node
+message NodeInfo {
+  bytes  id   = 1;  // 20-byte SHA-1 node ID
+  string addr = 2;  // host:port
+}
+
+// VectorClock maps nodeID -> lamport counter
+message VectorClock {
+  map<string, uint64> entries = 1;
+}
+
+// ValueEntry is a stored key-value with vector clock
+message ValueEntry {
+  bytes       key       = 1;  // 20-byte SHA-1 key ID
+  bytes       value     = 2;
+  VectorClock clock     = 3;
+  int64       timestamp = 4;  // UnixNano
+  int64       ttl_ns    = 5;  // TTL in nanoseconds (0 = no expiry)
+  string      node_id   = 6;  // last writer node ID (hex)
+}
+
+// Common RPC types
+
+message PingRequest {
+  NodeInfo sender = 1;
+}
+
+message PingResponse {
+  NodeInfo responder = 1;
+}
+
+message GetRequest {
+  NodeInfo sender = 1;
+  bytes    key    = 2;
+}
+
+message GetResponse {
+  ValueEntry entry = 1;
+  bool       found = 2;
+}
+
+message PutRequest {
+  NodeInfo   sender = 1;
+  ValueEntry entry  = 2;
+}
+
+message PutResponse {
+  bool success = 1;
+}
+
+message DeleteRequest {
+  NodeInfo sender = 1;
+  bytes    key    = 2;
+}
+
+message DeleteResponse {
+  bool success = 1;
+}
+
+// ReplicationService handles quorum-layer operations
+service ReplicationService {
+  rpc Get    (GetRequest)    returns (GetResponse);
+  rpc Put    (PutRequest)    returns (PutResponse);
+  rpc Delete (DeleteRequest) returns (DeleteResponse);
+  rpc Ping   (PingRequest)   returns (PingResponse);
+}
