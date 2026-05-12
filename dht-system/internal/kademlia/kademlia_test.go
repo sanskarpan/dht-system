@@ -19,12 +19,17 @@ import (
 // All nodes join sequentially through nodes[0] as bootstrap.
 func buildKadNetwork(t *testing.T, n int) ([]*kademlia.KademliaNode, *transport.InProcessTransport) {
 	t.Helper()
-	tr := transport.NewInProcessTransport(0, 0)
-	bus := events.NewEventBus()
 	cfg := kademlia.DefaultConfig()
 	// Disable background goroutines so they don't interfere with tests
 	cfg.RepublishInterval = 10 * time.Minute
 	cfg.BucketRefreshInterval = 10 * time.Minute
+	return buildKadNetworkWithConfig(t, n, cfg)
+}
+
+func buildKadNetworkWithConfig(t *testing.T, n int, cfg *kademlia.Config) ([]*kademlia.KademliaNode, *transport.InProcessTransport) {
+	t.Helper()
+	tr := transport.NewInProcessTransport(0, 0)
+	bus := events.NewEventBus()
 
 	nodes := make([]*kademlia.KademliaNode, n)
 	for i := 0; i < n; i++ {
@@ -389,6 +394,51 @@ func TestStoreAndRetrieve(t *testing.T) {
 	// At minimum, the storing node + the nodes it directly discovered via IterativeFindNode
 	if replicaCount < 2 {
 		t.Error("expected key to be stored on at least 2 nodes via KStore propagation")
+	}
+}
+
+// TestIterativeFindValueRemoteLookup verifies the shared iterative lookup path
+// still finds a remote value when the caller is not one of the stored replicas.
+func TestIterativeFindValueRemoteLookup(t *testing.T) {
+	cfg := kademlia.DefaultConfig()
+	cfg.K = 2
+	nodes, _ := buildKadNetworkWithConfig(t, 8, cfg)
+
+	ctx := context.Background()
+	key := "remote-lookup-key"
+	value := []byte("remote-lookup-value")
+
+	if err := nodes[0].StoreValue(ctx, key, value); err != nil {
+		t.Fatalf("StoreValue failed: %v", err)
+	}
+
+	keyID := kademlia.NodeID(consistent.KeyID(key))
+	lookupIdx := -1
+	for i := 1; i < len(nodes); i++ {
+		if _, ok := nodes[i].KVStore.Get([20]byte(keyID)); !ok {
+			lookupIdx = i
+			break
+		}
+	}
+	if lookupIdx == -1 {
+		t.Fatal("expected at least one non-replica node with K=2")
+	}
+
+	entry, contacts, hops, err := nodes[lookupIdx].IterativeFindValue(ctx, keyID)
+	if err != nil {
+		t.Fatalf("IterativeFindValue failed: %v", err)
+	}
+	if entry == nil {
+		t.Fatal("expected remote lookup to find the stored value")
+	}
+	if string(entry.Value) != string(value) {
+		t.Fatalf("value mismatch: got %q want %q", entry.Value, value)
+	}
+	if len(hops) == 0 {
+		t.Fatal("expected at least one network hop for a non-replica lookup")
+	}
+	if len(contacts) == 0 {
+		t.Fatal("expected closest contacts to be returned alongside the found value")
 	}
 }
 
