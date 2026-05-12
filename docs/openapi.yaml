@@ -1,0 +1,1182 @@
+openapi: 3.0.3
+
+info:
+  title: DHT System Gateway API
+  description: |
+    REST + WebSocket API for the DHT System simulation gateway.
+    The gateway manages a cluster of simulated Chord or Kademlia DHT nodes
+    running in-process, and exposes endpoints for network control, key-value
+    operations, lookup tracing, scenario execution, and Prometheus metrics.
+
+    All REST endpoints are prefixed with `/api/v1`.
+    Prometheus metrics are served at `/metrics` (text/plain Prometheus format).
+    Real-time events are streamed over WebSocket at `/ws`.
+  version: 1.0.0
+  contact:
+    name: DHT System
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development gateway
+
+tags:
+  - name: Network
+    description: Manage the DHT network lifecycle and configuration
+  - name: Nodes
+    description: Spawn, inspect, and kill individual DHT nodes
+  - name: KeyValue
+    description: Insert, retrieve, and replicate key-value pairs
+  - name: Lookup
+    description: Trace key lookup routing paths
+  - name: Scenarios
+    description: Run pre-built simulation scenarios
+  - name: Observability
+    description: Prometheus metrics and health endpoints
+  - name: Realtime
+    description: WebSocket event stream
+
+paths:
+
+  # ---------------------------------------------------------------------------
+  # Network
+  # ---------------------------------------------------------------------------
+
+  /api/v1/network/state:
+    get:
+      operationId: getNetworkState
+      summary: Get full network snapshot
+      description: |
+        Returns a complete snapshot of the DHT ring including all active nodes,
+        their finger tables / k-buckets, and all stored keys with their
+        replica assignments.
+      tags: [Network]
+      responses:
+        "200":
+          description: Network state snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkState"
+              example:
+                protocol: chord
+                nodes:
+                  - id: "1a2b3c4d"
+                    addr: "node-0:4000"
+                    protocol: chord
+                    status: alive
+                    successor: "2b3c4d5e"
+                    predecessor: "0a1b2c3d"
+                    keyCount: 3
+                keys:
+                  - id: "deadbeef"
+                    key: "hello"
+                    value: "world"
+                    replicas: ["node-0:4000", "node-1:4001"]
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/network/start:
+    post:
+      operationId: startNetwork
+      summary: Start or extend the network
+      description: |
+        Spawns a batch of new nodes and optionally sets the DHT protocol.
+        Can be called multiple times to grow the network.
+      tags: [Network]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                protocol:
+                  type: string
+                  enum: [chord, kademlia]
+                  description: DHT protocol to use for new nodes
+                  example: chord
+                nodeCount:
+                  type: integer
+                  minimum: 1
+                  maximum: 50
+                  default: 6
+                  description: Number of nodes to spawn
+                  example: 6
+      responses:
+        "200":
+          description: Updated network state after spawn
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkState"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/network/reset:
+    post:
+      operationId: resetNetwork
+      summary: Reset the network
+      description: Resets the DHT simulation to its initial state. Returns current state.
+      tags: [Network]
+      responses:
+        "200":
+          description: Current network state (after reset)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkState"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/network/config:
+    get:
+      operationId: getConfig
+      summary: Get network configuration
+      description: Returns the current orchestrator configuration (protocol, quorum settings, intervals, etc.)
+      tags: [Network]
+      responses:
+        "200":
+          description: Current configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Config"
+
+    put:
+      operationId: updateConfig
+      summary: Update network configuration
+      description: |
+        Updates the orchestrator configuration. Changes take effect for subsequent
+        operations; existing nodes are not restarted.
+      tags: [Network]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Config"
+      responses:
+        "200":
+          description: Updated configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Config"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  # ---------------------------------------------------------------------------
+  # Nodes
+  # ---------------------------------------------------------------------------
+
+  /api/v1/nodes:
+    post:
+      operationId: spawnNode
+      summary: Spawn a new DHT node
+      description: |
+        Spawns a single new DHT node and joins it to the existing ring.
+        The node's protocol is determined by the current network configuration.
+        An optional address can be provided; if omitted the gateway assigns one.
+      tags: [Nodes]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                addr:
+                  type: string
+                  description: Optional address to assign to the new node
+                  example: "node-7:4007"
+      responses:
+        "201":
+          description: Newly spawned node
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpawnNodeResponse"
+              example:
+                id: "cafebabe"
+                addr: "node-7:4007"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/nodes/{nodeId}:
+    get:
+      operationId: getNode
+      summary: Get node details
+      description: Returns the full state snapshot of a specific node by ID or address.
+      tags: [Nodes]
+      parameters:
+        - $ref: "#/components/parameters/nodeId"
+      responses:
+        "200":
+          description: Node state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: killNode
+      summary: Kill a DHT node
+      description: |
+        Gracefully shuts down the specified node and removes it from the ring.
+        Other nodes will detect the departure and stabilize.
+      tags: [Nodes]
+      parameters:
+        - $ref: "#/components/parameters/nodeId"
+      responses:
+        "200":
+          description: Node killed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/nodes/{nodeId}/crash:
+    post:
+      operationId: crashNode
+      summary: Crash a DHT node
+      description: |
+        Simulates a sudden crash of a node (no graceful departure).
+        Useful for testing fault tolerance and recovery behaviour.
+      tags: [Nodes]
+      parameters:
+        - $ref: "#/components/parameters/nodeId"
+      responses:
+        "200":
+          description: Node crashed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ---------------------------------------------------------------------------
+  # Key-Value
+  # ---------------------------------------------------------------------------
+
+  /api/v1/kv:
+    post:
+      operationId: putKey
+      summary: Insert or update a key-value pair
+      description: |
+        Stores a key-value pair in the DHT using quorum writes.
+        The key is hashed to determine the responsible node(s).
+        Replication follows the configured replication factor (default N=3).
+      tags: [KeyValue]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutKeyRequest"
+            example:
+              key: "hello"
+              value: "world"
+      responses:
+        "200":
+          description: Key inserted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PutKeyResponse"
+              example:
+                success: true
+                keyHash: "2c624232cdd221771294dfbb310acbc"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/kv/{key}:
+    get:
+      operationId: getKey
+      summary: Retrieve a value by key
+      description: |
+        Looks up and returns a key-value pair from the DHT network state.
+        Returns 404 if the key has not been inserted.
+      tags: [KeyValue]
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The string key to look up
+          example: "hello"
+      responses:
+        "200":
+          description: Key found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyState"
+              example:
+                id: "2c624232cdd221771294dfbb310acbc"
+                key: "hello"
+                value: "world"
+                replicas: ["node-0:4000", "node-1:4001", "node-2:4002"]
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteKey
+      summary: Delete a key
+      description: Removes a key-value pair from the DHT. Currently a stub that returns success.
+      tags: [KeyValue]
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The string key to delete
+          example: "hello"
+      responses:
+        "200":
+          description: Key deleted (or did not exist)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /api/v1/kv/{key}/replicas:
+    get:
+      operationId: getKeyReplicas
+      summary: Get replica information for a key
+      description: Returns all replica nodes that hold a copy of the specified key.
+      tags: [KeyValue]
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The string key to inspect
+          example: "hello"
+      responses:
+        "200":
+          description: Replica list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplicaResponse"
+              example:
+                replicas:
+                  - nodeId: "1a2b3c4d"
+                    entry:
+                      key: "2c624232cdd221771294dfbb310acbc"
+                      value: "d29ybGQ="
+                      clock: {"1a2b3c4d": 1}
+                      timestamp: "2024-01-01T00:00:00Z"
+                      ttlNs: 0
+                      nodeId: "1a2b3c4d"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------------------------------------------------------------------------
+  # Lookup
+  # ---------------------------------------------------------------------------
+
+  /api/v1/lookup:
+    post:
+      operationId: traceLookup
+      summary: Trace a key lookup
+      description: |
+        Performs a key lookup and returns the full routing trace including
+        each hop taken, the target node, and total latency.
+        Also records lookup metrics in Prometheus.
+      tags: [Lookup]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LookupRequest"
+            example:
+              key: "hello"
+      responses:
+        "200":
+          description: Lookup trace result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LookupTrace"
+              example:
+                key: "hello"
+                keyHash: "2c624232cdd221771294dfbb310acbc"
+                targetNode: "node-2:4002"
+                hops:
+                  - from: "node-0:4000"
+                    to: "node-2:4002"
+                    hopIndex: 0
+                totalHops: 1
+                latencyMs: 3
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ---------------------------------------------------------------------------
+  # Scenarios
+  # ---------------------------------------------------------------------------
+
+  /api/v1/scenarios:
+    get:
+      operationId: listScenarios
+      summary: List available scenarios
+      description: Returns the list of built-in simulation scenarios that can be run.
+      tags: [Scenarios]
+      responses:
+        "200":
+          description: Scenario list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioList"
+              example:
+                scenarios:
+                  - name: bootstrap
+                    description: "Spawn nodes one by one and watch ring form"
+                  - name: churn
+                    description: "Add/remove nodes continuously for 30s"
+                  - name: partition
+                    description: "Split network and heal it"
+                  - name: hotkey
+                    description: "Write 1000 keys and observe load distribution"
+
+  /api/v1/scenarios/{name}/run:
+    post:
+      operationId: runScenario
+      summary: Run a named scenario
+      description: |
+        Starts the named scenario in the background. Progress events are
+        streamed over the `/ws` WebSocket endpoint as `scenario_step` events.
+
+        Available scenarios:
+        - `bootstrap` — spawn 10 nodes one by one
+        - `churn` — add/remove nodes for 30 seconds
+        - `partition` — split and heal the network with test keys
+        - `hotkey` — write 1000 keys to observe load distribution
+        - `benchmark` — run a concurrent read/write benchmark
+      tags: [Scenarios]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [bootstrap, churn, partition, hotkey, benchmark]
+          description: Scenario name
+          example: bootstrap
+      responses:
+        "200":
+          description: Scenario started in background
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioStartResponse"
+              example:
+                started: true
+                scenario: bootstrap
+                message: "scenario running in background; subscribe to scenario_step events on /ws"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  # ---------------------------------------------------------------------------
+  # Observability
+  # ---------------------------------------------------------------------------
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      summary: Prometheus metrics
+      description: |
+        Exposes all registered Prometheus metrics in the standard text exposition
+        format. Intended to be scraped by a Prometheus server every 15 seconds.
+
+        Key DHT metrics:
+        - `dht_node_count{protocol}` — active node gauge
+        - `dht_key_count{protocol}` — stored key gauge
+        - `dht_lookup_hops_bucket{protocol}` — hop count histogram
+        - `dht_lookup_duration_ms_bucket{protocol}` — lookup latency histogram
+        - `dht_writes_total{protocol,status}` — write operation counter
+        - `dht_reads_total{protocol,status}` — read operation counter
+        - `dht_stabilize_cycles_total{node}` — Chord stabilization counter
+        - `dht_gossip_syncs_total{from_node}` — gossip sync counter
+      tags: [Observability]
+      responses:
+        "200":
+          description: Prometheus text metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: |
+                # HELP dht_node_count Current number of active DHT nodes.
+                # TYPE dht_node_count gauge
+                dht_node_count{protocol="chord"} 6
+                # HELP dht_key_count Total key-value entries across all nodes.
+                # TYPE dht_key_count gauge
+                dht_key_count{protocol="chord"} 42
+
+  /api/v1/metrics/json:
+    get:
+      operationId: getMetricsJSON
+      summary: Get metrics as JSON
+      description: Returns a simple JSON summary of node count, key count, and protocol.
+      tags: [Observability]
+      responses:
+        "200":
+          description: JSON metrics summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodeCount:
+                    type: integer
+                    example: 6
+                  keyCount:
+                    type: integer
+                    example: 42
+                  protocol:
+                    type: string
+                    example: chord
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      description: |
+        Returns HTTP 200 if the gateway process is running and accepting
+        connections. Does not verify DHT node health.
+      tags: [Observability]
+      responses:
+        "200":
+          description: Gateway is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+              example:
+                status: ok
+
+  # ---------------------------------------------------------------------------
+  # WebSocket
+  # ---------------------------------------------------------------------------
+
+  /ws:
+    get:
+      operationId: connectWebSocket
+      summary: Connect to the DHT event stream
+      description: |
+        Upgrades the HTTP connection to a WebSocket. The server immediately
+        sends the current ring state on connect, then streams all DHT events
+        as they occur.
+
+        **Server-sent event format:**
+        ```json
+        {
+          "type": "ring_state | node_joined | node_left | key_written | lookup_trace | scenario_step",
+          "ts":   "2026-03-08T12:00:00Z",
+          "payload": { ... }
+        }
+        ```
+
+        **Client subscription message:**
+        Send a JSON message to filter events:
+        ```json
+        {
+          "action": "subscribe",
+          "events": ["ring_state", "node_joined", "lookup_trace"]
+        }
+        ```
+        Send `"events": ["*"]` (or omit the message) to receive all event types.
+
+        **Event types:**
+        - `ring_state` — periodic full ring snapshot (every 5 seconds)
+        - `node_joined` — a node joined the ring
+        - `node_left` — a node left or crashed
+        - `key_written` — a key was stored
+        - `lookup_trace` — a lookup was traced
+        - `scenario_step` — progress step from a running scenario
+      tags: [Realtime]
+      responses:
+        "101":
+          description: Switching Protocols (WebSocket upgrade)
+        "400":
+          description: Bad request (not a valid WebSocket upgrade)
+
+# =============================================================================
+# Components
+# =============================================================================
+
+components:
+
+  parameters:
+    nodeId:
+      name: nodeId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Node hex ID or address string (e.g. `1a2b3c4d` or `node-0:4000`)
+      example: "1a2b3c4d"
+
+  responses:
+    BadRequest:
+      description: Bad request — invalid or missing body fields
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "invalid character 'x' looking for beginning of value"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "node not found"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "failed to spawn node: ring is full"
+
+  schemas:
+
+    # -------------------------------------------------------------------------
+    # Common
+    # -------------------------------------------------------------------------
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+          example: "node not found"
+
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    # -------------------------------------------------------------------------
+    # Network / Config
+    # -------------------------------------------------------------------------
+
+    Config:
+      type: object
+      description: Orchestrator configuration parameters
+      properties:
+        protocol:
+          type: string
+          enum: [chord, kademlia]
+          description: DHT protocol for new nodes
+          example: chord
+        m:
+          type: integer
+          description: Hash space bit width
+          example: 160
+        virtualNodes:
+          type: integer
+          description: Virtual nodes per physical node
+          example: 3
+        replicationN:
+          type: integer
+          description: Replication factor (N)
+          example: 3
+        writeQuorum:
+          type: integer
+          description: Minimum write acknowledgements required
+          example: 2
+        readQuorum:
+          type: integer
+          description: Minimum read acknowledgements required
+          example: 2
+        successorListSize:
+          type: integer
+          description: Chord successor list size
+          example: 8
+        kBucketSize:
+          type: integer
+          description: Kademlia k-bucket size
+          example: 20
+        alpha:
+          type: integer
+          description: Kademlia concurrency parameter
+          example: 3
+        stabilizeInterval:
+          type: string
+          description: Chord stabilization interval (Go duration string)
+          example: "500ms"
+        fixFingersInterval:
+          type: string
+          description: Chord fix-fingers interval
+          example: "1s"
+        gossipInterval:
+          type: string
+          description: Anti-entropy gossip interval
+          example: "2s"
+        republishInterval:
+          type: string
+          description: Key republish interval
+          example: "24s"
+        simDelay:
+          type: string
+          description: Simulated network round-trip delay
+          example: "0s"
+        simLossRate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Simulated packet loss rate (0.0–1.0)
+          example: 0
+        initialNodes:
+          type: integer
+          description: Number of nodes spawned at startup
+          example: 6
+
+    NetworkState:
+      type: object
+      required: [protocol, nodes, keys]
+      description: Full snapshot of the DHT network
+      properties:
+        protocol:
+          type: string
+          enum: [chord, kademlia]
+          description: Active DHT protocol
+          example: chord
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeState"
+        keys:
+          type: array
+          items:
+            $ref: "#/components/schemas/KeyState"
+        config:
+          $ref: "#/components/schemas/Config"
+
+    # -------------------------------------------------------------------------
+    # Nodes
+    # -------------------------------------------------------------------------
+
+    NodeState:
+      type: object
+      required: [id, addr, protocol, status, keyCount]
+      description: Snapshot of a single DHT node
+      properties:
+        id:
+          type: string
+          description: Hex-encoded 160-bit node ID
+          example: "1a2b3c4d5e6f7890abcdef1234567890abcdef12"
+        addr:
+          type: string
+          description: Node network address
+          example: "node-0:4000"
+        protocol:
+          type: string
+          enum: [chord, kademlia]
+          example: chord
+        status:
+          type: string
+          enum: [alive, dead, crashed]
+          description: Current node lifecycle status
+          example: alive
+        successor:
+          type: string
+          nullable: true
+          description: Hex ID of successor node (Chord only)
+          example: "2b3c4d5e"
+        predecessor:
+          type: string
+          nullable: true
+          description: Hex ID of predecessor node (Chord only)
+          example: "0a1b2c3d"
+        successorList:
+          type: array
+          items:
+            type: string
+          description: Ordered list of successor node IDs (Chord only)
+          example: ["2b3c4d5e", "3c4d5e6f"]
+        fingerTable:
+          type: array
+          items:
+            $ref: "#/components/schemas/FingerEntry"
+          description: Chord finger table entries
+        kBuckets:
+          type: array
+          items:
+            $ref: "#/components/schemas/KBucketState"
+          description: Kademlia k-bucket states
+        keyCount:
+          type: integer
+          description: Number of keys stored on this node
+          example: 7
+
+    FingerEntry:
+      type: object
+      description: Single entry in a Chord finger table
+      properties:
+        index:
+          type: integer
+          description: Finger index (0-based)
+          example: 0
+        start:
+          type: string
+          description: Start of the finger interval (hex)
+          example: "1a2b3c4d"
+        nodeId:
+          type: string
+          description: ID of the node responsible for this interval
+          example: "2b3c4d5e"
+        addr:
+          type: string
+          description: Address of the responsible node
+          example: "node-1:4001"
+
+    KBucketState:
+      type: object
+      description: State of a single Kademlia k-bucket
+      properties:
+        index:
+          type: integer
+          description: Bucket index (0-based, corresponds to XOR distance bit range)
+          example: 3
+        contacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContactState"
+        capacity:
+          type: integer
+          description: Maximum contacts (k value)
+          example: 20
+
+    ContactState:
+      type: object
+      description: A single contact in a Kademlia k-bucket
+      properties:
+        id:
+          type: string
+          description: Hex node ID
+          example: "cafebabe"
+        addr:
+          type: string
+          description: Node address
+          example: "node-3:4003"
+        lastSeen:
+          type: string
+          format: date-time
+          description: Last successful contact timestamp
+          example: "2026-03-08T11:59:00Z"
+
+    SpawnNodeResponse:
+      type: object
+      required: [id, addr]
+      properties:
+        id:
+          type: string
+          description: Hex-encoded node ID
+          example: "cafebabe12345678"
+        addr:
+          type: string
+          description: Assigned node address
+          example: "node-7:4007"
+
+    # -------------------------------------------------------------------------
+    # Key-Value
+    # -------------------------------------------------------------------------
+
+    PutKeyRequest:
+      type: object
+      required: [key, value]
+      properties:
+        key:
+          type: string
+          description: Key string (any UTF-8)
+          example: "hello"
+        value:
+          type: string
+          description: Value string
+          example: "world"
+
+    PutKeyResponse:
+      type: object
+      required: [success, keyHash]
+      properties:
+        success:
+          type: boolean
+          example: true
+        keyHash:
+          type: string
+          description: Hex-encoded hash of the key used for ring placement
+          example: "2c624232cdd221771294dfbb310acbc"
+
+    KeyState:
+      type: object
+      required: [id, key, value, replicas]
+      description: Snapshot of a stored key-value pair
+      properties:
+        id:
+          type: string
+          description: Hex-encoded hash of the key
+          example: "2c624232cdd221771294dfbb310acbc"
+        key:
+          type: string
+          description: Original key string
+          example: "hello"
+        value:
+          type: string
+          description: Stored value string
+          example: "world"
+        replicas:
+          type: array
+          items:
+            type: string
+          description: Addresses of nodes holding a replica
+          example: ["node-0:4000", "node-1:4001", "node-2:4002"]
+
+    ReplicaEntry:
+      type: object
+      required: [key, value, clock, timestamp, ttlNs, nodeId]
+      description: Full value entry stored on a single replica node
+      properties:
+        key:
+          type: string
+          description: Hex-encoded SHA-1 key hash
+          example: "2c624232cdd221771294dfbb310acbc"
+        value:
+          type: string
+          description: Base64-encoded stored value
+          example: "d29ybGQ="
+        clock:
+          type: object
+          description: Vector clock as a flat map of nodeId → counter
+          additionalProperties:
+            type: integer
+            format: int64
+          example: {"1a2b3c4d": 2}
+        timestamp:
+          type: string
+          format: date-time
+          description: RFC3339Nano timestamp of last write
+          example: "2024-01-01T00:00:00.000000000Z"
+        ttlNs:
+          type: integer
+          format: int64
+          description: Time-to-live in nanoseconds (0 = no expiry)
+          example: 0
+        nodeId:
+          type: string
+          description: Hex node ID that created this entry
+          example: "1a2b3c4d"
+
+    ReplicaResponse:
+      type: object
+      required: [replicas]
+      properties:
+        replicas:
+          type: array
+          items:
+            type: object
+            required: [nodeId, entry]
+            properties:
+              nodeId:
+                type: string
+                description: Hex node ID holding this replica
+                example: "1a2b3c4d"
+              entry:
+                $ref: "#/components/schemas/ReplicaEntry"
+
+    # -------------------------------------------------------------------------
+    # Lookup
+    # -------------------------------------------------------------------------
+
+    LookupRequest:
+      type: object
+      required: [key]
+      properties:
+        key:
+          type: string
+          description: Key to look up
+          example: "hello"
+
+    HopEvent:
+      type: object
+      description: A single routing hop during a lookup
+      properties:
+        from:
+          type: string
+          description: Address of the forwarding node
+          example: "node-0:4000"
+        to:
+          type: string
+          description: Address of the next node
+          example: "node-2:4002"
+        hopIndex:
+          type: integer
+          description: Zero-based hop sequence number
+          example: 0
+
+    LookupTrace:
+      type: object
+      required: [key, keyHash, targetNode, hops, totalHops, latencyMs]
+      description: Complete routing trace for a key lookup
+      properties:
+        key:
+          type: string
+          description: Original lookup key
+          example: "hello"
+        keyHash:
+          type: string
+          description: Hex-encoded hash of the key
+          example: "2c624232cdd221771294dfbb310acbc"
+        targetNode:
+          type: string
+          description: Address of the node responsible for the key
+          example: "node-2:4002"
+        hops:
+          type: array
+          items:
+            $ref: "#/components/schemas/HopEvent"
+        totalHops:
+          type: integer
+          description: Total number of routing hops taken
+          example: 2
+        latencyMs:
+          type: integer
+          description: Total lookup latency in milliseconds
+          example: 3
+
+    # -------------------------------------------------------------------------
+    # Scenarios
+    # -------------------------------------------------------------------------
+
+    ScenarioInfo:
+      type: object
+      required: [name, description]
+      properties:
+        name:
+          type: string
+          description: Scenario identifier
+          example: bootstrap
+        description:
+          type: string
+          description: Human-readable scenario description
+          example: "Spawn nodes one by one and watch ring form"
+
+    ScenarioList:
+      type: object
+      required: [scenarios]
+      properties:
+        scenarios:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScenarioInfo"
+
+    ScenarioStartResponse:
+      type: object
+      required: [started, scenario, message]
+      properties:
+        started:
+          type: boolean
+          example: true
+        scenario:
+          type: string
+          description: Name of the started scenario
+          example: bootstrap
+        message:
+          type: string
+          description: Informational message
+          example: "scenario running in background; subscribe to scenario_step events on /ws"
+
+    # -------------------------------------------------------------------------
+    # WebSocket events (informational schemas)
+    # -------------------------------------------------------------------------
+
+    WebSocketEvent:
+      type: object
+      description: |
+        Event envelope streamed over the WebSocket connection.
+        The `payload` field shape depends on the `type`.
+      required: [type, ts, payload]
+      properties:
+        type:
+          type: string
+          enum:
+            - ring_state
+            - node_joined
+            - node_left
+            - key_written
+            - lookup_trace
+            - scenario_step
+          description: Event type discriminator
+          example: ring_state
+        ts:
+          type: string
+          format: date-time
+          description: UTC timestamp of the event
+          example: "2026-03-08T12:00:00Z"
+        payload:
+          type: object
+          description: |
+            Event-specific payload:
+            - `ring_state`: NetworkState object
+            - `node_joined` / `node_left`: NodeState object
+            - `key_written`: KeyState object
+            - `lookup_trace`: LookupTrace object
+            - `scenario_step`: `{"scenario":"...","step":N,"message":"..."}`
+
+    WebSocketSubscribeMessage:
+      type: object
+      description: Client message to filter received event types
+      required: [action, events]
+      properties:
+        action:
+          type: string
+          enum: [subscribe]
+          example: subscribe
+        events:
+          type: array
+          items:
+            type: string
+          description: |
+            List of event type strings to receive.
+            Use `["*"]` or omit the message to receive all event types.
+          example: ["ring_state", "node_joined", "lookup_trace"]
