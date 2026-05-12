@@ -1,0 +1,36 @@
+server:
+  port: 8080
+  cors_origins:
+    - "http://localhost:5173"
+
+dht:
+  protocol: chord          # chord | kademlia
+  m: 160                   # hash space bits
+  virtual_nodes: 3
+  replication_n: 3
+  write_quorum: 2
+  read_quorum: 2
+
+chord:
+  stabilize_interval: 500ms
+  fix_fingers_interval: 1s
+  check_predecessor_interval: 750ms
+  check_successor_interval: 750ms
+  successor_list_size: 8
+
+kademlia:
+  k: 20
+  alpha: 3
+  republish_interval: 24s
+  expire_ttl: 25s
+  bucket_refresh_interval: 60s
+  ping_timeout: 300ms
+
+simulation:
+  initial_nodes: 6
+  sim_delay: 0ms
+  sim_loss_rate: 0.0
+
+logging:
+  level: info             # debug | info | warn | error
+  format: json
