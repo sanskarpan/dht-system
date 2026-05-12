@@ -1,0 +1,67 @@
+syntax = "proto3";
+package dht;
+
+option go_package = "github.com/sanskarpan/dht-system/dht-system/proto/gen";
+
+import "common.proto";
+
+// --- Chord RPCs ---
+
+message FindSuccessorRequest {
+  NodeInfo sender = 1;
+  bytes    id     = 2;  // 20-byte ID to find successor of
+}
+
+message FindSuccessorResponse {
+  NodeInfo successor = 1;
+}
+
+message GetPredecessorRequest {
+  NodeInfo sender = 1;
+}
+
+message GetPredecessorResponse {
+  NodeInfo predecessor = 1;  // may be empty if predecessor is nil
+  bool     has_predecessor = 2;
+}
+
+message NotifyRequest {
+  NodeInfo sender    = 1;  // the sender is claiming to be predecessor
+  NodeInfo candidate = 2;
+}
+
+message NotifyResponse {}
+
+message GetSuccListRequest {
+  NodeInfo sender = 1;
+}
+
+message GetSuccListResponse {
+  repeated NodeInfo successors = 1;
+}
+
+message TransferKeysRequest {
+  NodeInfo             sender  = 1;
+  repeated ValueEntry  entries = 2;
+}
+
+message TransferKeysResponse {
+  int32 accepted = 1;
+}
+
+message UpdateFingerTableRequest {
+  NodeInfo sender = 1;
+  NodeInfo s      = 2;  // node that may be a better finger
+  int32    i      = 3;  // finger index
+}
+
+message UpdateFingerTableResponse {}
+
+service ChordService {
+  rpc FindSuccessor    (FindSuccessorRequest)    returns (FindSuccessorResponse);
+  rpc GetPredecessor   (GetPredecessorRequest)   returns (GetPredecessorResponse);
+  rpc Notify           (NotifyRequest)           returns (NotifyResponse);
+  rpc GetSuccessorList (GetSuccListRequest)       returns (GetSuccListResponse);
+  rpc TransferKeys     (TransferKeysRequest)      returns (TransferKeysResponse);
+  rpc UpdateFingerTable(UpdateFingerTableRequest) returns (UpdateFingerTableResponse);
+}
