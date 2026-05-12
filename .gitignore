@@ -1,0 +1,14 @@
+.DS_Store
+Thumbs.db
+
+.idea/
+.vscode/
+*.swp
+*.swo
+
+dht-system/node
+dht-system/frontend/node_modules/
+dht-system/frontend/dist/
+dht-system/frontend/.vite/
+
+*.log
