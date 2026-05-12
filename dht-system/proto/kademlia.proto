@@ -1,0 +1,52 @@
+syntax = "proto3";
+package dht;
+
+option go_package = "github.com/sanskarpan/dht-system/dht-system/proto/gen";
+
+import "common.proto";
+
+// --- Kademlia RPCs ---
+
+message KPingRequest {
+  NodeInfo sender = 1;
+}
+
+message KPingResponse {
+  NodeInfo responder = 1;
+}
+
+message KStoreRequest {
+  NodeInfo   sender = 1;
+  ValueEntry entry  = 2;
+}
+
+message KStoreResponse {
+  bool success = 1;
+}
+
+message FindNodeRequest {
+  NodeInfo sender   = 1;
+  bytes    target   = 2;  // 20-byte target node ID
+}
+
+message FindNodeResponse {
+  repeated NodeInfo contacts = 1;  // up to k closest contacts
+}
+
+message FindValueRequest {
+  NodeInfo sender = 1;
+  bytes    key    = 2;  // 20-byte key ID
+}
+
+message FindValueResponse {
+  bool               found    = 1;
+  ValueEntry         entry    = 2;  // set if found == true
+  repeated NodeInfo  contacts = 3;  // set if found == false (k closest)
+}
+
+service KademliaService {
+  rpc Ping      (KPingRequest)    returns (KPingResponse);
+  rpc Store     (KStoreRequest)   returns (KStoreResponse);
+  rpc FindNode  (FindNodeRequest) returns (FindNodeResponse);
+  rpc FindValue (FindValueRequest) returns (FindValueResponse);
+}
