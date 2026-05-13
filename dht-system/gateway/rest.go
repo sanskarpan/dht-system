@@ -483,7 +483,10 @@ func (h *restHandler) runScenario(c *gin.Context) {
 		DurationS float64 `json:"durationSeconds"`
 		KeyCount  int     `json:"keyCount"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil && err.Error() != "EOF" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	var runErr error
 	switch name {

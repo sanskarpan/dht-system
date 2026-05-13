@@ -259,3 +259,21 @@ func TestFaultInjectionEndpoints(t *testing.T) {
 		t.Fatalf("faults after reset = %+v, want empty", faults)
 	}
 }
+
+func TestRunScenarioRejectsMalformedJSON(t *testing.T) {
+	_, server := buildTestServer(t, "chord", 2)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/scenarios/bootstrap/run",
+		bytes.NewBufferString(`{"nodeCount":`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	server.Router().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("runScenario malformed JSON status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
