@@ -101,7 +101,7 @@ function AppInner() {
   ];
 
   return (
-    <div className="flex h-screen flex-col text-slate-200 min-w-[1280px]" style={{ background: 'var(--color-bg)' }}>
+    <div className="flex h-screen min-h-0 flex-col text-slate-200" style={{ background: 'var(--color-bg)' }}>
       {/* Top nav */}
       <header className="flex items-center shrink-0 border-b border-slate-800/70"
               style={{ background: 'linear-gradient(180deg, #0d1520 0%, #080e1a 100%)' }}>
