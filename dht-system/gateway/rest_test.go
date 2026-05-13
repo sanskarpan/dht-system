@@ -278,6 +278,24 @@ func TestRunScenarioRejectsMalformedJSON(t *testing.T) {
 	}
 }
 
+func TestUnknownAPIRoutesReturnJSON404(t *testing.T) {
+	_, server := buildTestServer(t, "chord", 1)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/does-not-exist", nil)
+	rec := httptest.NewRecorder()
+	server.Router().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown api route status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json; charset=utf-8" {
+		t.Fatalf("unknown api route content-type=%q want JSON", ct)
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"error":"not found"`)) {
+		t.Fatalf("unknown api route body=%s", rec.Body.String())
+	}
+}
+
 func TestSpawnNodeRejectsMalformedAddr(t *testing.T) {
 	_, server := buildTestServer(t, "chord", 1)
 
