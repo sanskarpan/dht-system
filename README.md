@@ -85,6 +85,7 @@ npm run build
 ```
 
 The gateway serves the built frontend from `/frontend/dist` at `http://localhost:8080`.
+If the frontend has not been built yet, the gateway still serves the REST API and WebSocket endpoints, but browser routes return a clear `503` explaining that the UI assets are missing.
 
 ### 5. (Optional) Frontend dev server
 
