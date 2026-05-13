@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"fmt"
+	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -49,6 +51,10 @@ func NewServer(orch *simulation.Orchestrator, bus *events.EventBus, port int) *S
 	r.Static("/assets", "./frontend/dist/assets")
 	r.StaticFile("/favicon.ico", "./frontend/dist/favicon.ico")
 	r.NoRoute(func(c *gin.Context) {
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") || c.Request.URL.Path == "/api" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
 		c.File("./frontend/dist/index.html")
 	})
 
