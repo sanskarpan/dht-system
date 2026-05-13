@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface HopDataPoint {
   time: string;
@@ -27,6 +27,14 @@ interface QuorumStats {
   writeCount: number;
   readCount: number;
   avgLagMs: number | null;
+}
+
+interface MetricsSnapshot {
+  hopHistory: HopDataPoint[];
+  hopHistogram: HopBucket[];
+  stabilizeRate: number;
+  quorumStats: QuorumStats;
+  totalLookups: number;
 }
 
 // Build histogram buckets from an array of hop counts
@@ -58,19 +66,19 @@ export default function MetricsPanel() {
   const nodes = useDHTStore((s: DHTStore) => s.nodes);
   const keys = useDHTStore((s: DHTStore) => s.keys);
   const events = useDHTStore((s: DHTStore) => s.events);
-
-  const [hopHistory, setHopHistory] = useState<HopDataPoint[]>([]);
-  const [hopHistogram, setHopHistogram] = useState<HopBucket[]>(buildHopHistogram([]));
-  const [stabilizeRate, setStabilizeRate] = useState<number>(0);
-  const [quorumStats, setQuorumStats] = useState<QuorumStats>({ writeCount: 0, readCount: 0, avgLagMs: null });
+  const [clockTick, setClockTick] = useState(() => Date.now());
 
   useEffect(() => {
-    const now = Date.now();
-    const tenSecondsAgo = now - 10_000;
+    const timer = setInterval(() => setClockTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const { hopHistory, hopHistogram, stabilizeRate, quorumStats, totalLookups } = useMemo<MetricsSnapshot>(() => {
+    const tenSecondsAgo = clockTick - 10_000;
 
     // --- Hop history (line chart, recent 20) ---
-    const lookupEvents = events
-      .filter(e => e.type === 'lookup_complete')
+    const allLookupCompleteEvents = events.filter(e => e.type === 'lookup_complete');
+    const lookupHistory = allLookupCompleteEvents
       .slice(0, 20)
       .map((e) => {
         const p = e.payload as { totalHops?: number };
@@ -80,22 +88,18 @@ export default function MetricsPanel() {
         };
       })
       .reverse();
-    setHopHistory(lookupEvents);
 
     // --- Hop histogram (all lookup_complete events in store) ---
-    const allHopCounts = events
-      .filter(e => e.type === 'lookup_complete')
+    const allHopCounts = allLookupCompleteEvents
       .map((e) => {
         const p = e.payload as { totalHops?: number };
         return p.totalHops ?? 0;
       });
-    setHopHistogram(buildHopHistogram(allHopCounts));
 
     // --- Stabilization rate: count stabilize events in last 10s ---
     const recentStabilize = events.filter(
       e => e.type === 'stabilize' && new Date(e.timestamp).getTime() >= tenSecondsAgo
     );
-    setStabilizeRate(parseFloat((recentStabilize.length / 10).toFixed(1)));
 
     // --- Quorum event counts + replication lag ---
     const recentWrite = events.filter(
@@ -107,7 +111,7 @@ export default function MetricsPanel() {
 
     // Compute avg replication lag from replication_lag events in last 60s
     const lagEvents = events.filter(
-      e => e.type === 'replication_lag' && new Date(e.timestamp).getTime() >= now - 60_000
+      e => e.type === 'replication_lag' && new Date(e.timestamp).getTime() >= clockTick - 60_000
     );
     let avgLagMs: number | null = null;
     if (lagEvents.length > 0) {
@@ -118,14 +122,18 @@ export default function MetricsPanel() {
       avgLagMs = Math.round(totalLag / lagEvents.length);
     }
 
-    setQuorumStats({ writeCount: recentWrite.length, readCount: recentRead.length, avgLagMs });
-  }, [events]);
+    return {
+      hopHistory: lookupHistory,
+      hopHistogram: buildHopHistogram(allHopCounts),
+      stabilizeRate: parseFloat((recentStabilize.length / 10).toFixed(1)),
+      quorumStats: { writeCount: recentWrite.length, readCount: recentRead.length, avgLagMs },
+      totalLookups: allLookupCompleteEvents.length,
+    };
+  }, [events, clockTick]);
 
   const nodeCount = nodes.size;
   const keyCount = keys.size;
   const logN = nodeCount > 0 ? Math.ceil(Math.log2(nodeCount)) : 0;
-
-  const totalLookups = events.filter(e => e.type === 'lookup_complete').length;
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
