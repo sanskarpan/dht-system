@@ -32,6 +32,7 @@ func NewServer(orch *simulation.Orchestrator, bus *events.EventBus, port int) *S
 	r.Use(gin.Recovery())
 	r.Use(corsMiddleware())
 	r.Use(requestBodyLimitMiddleware(1 << 20))
+	r.Use(requestIDMiddleware())
 	r.Use(loggingMiddleware())
 	r.NoMethod(func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") || c.Request.URL.Path == "/api" {
