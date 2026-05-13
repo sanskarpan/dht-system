@@ -475,6 +475,15 @@ func (h *restHandler) listScenarios(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"scenarios": scenarios})
 }
 
+func observeScenarioResult(logger *zap.Logger, scenario string, err error) {
+	if err != nil {
+		DHTScenarioExecutionsTotal.WithLabelValues(scenario, "error").Inc()
+		logger.Warn("scenario error", zap.String("scenario", scenario), zap.Error(err))
+		return
+	}
+	DHTScenarioExecutionsTotal.WithLabelValues(scenario, "completed").Inc()
+}
+
 func (h *restHandler) runScenario(c *gin.Context) {
 	name := c.Param("name")
 	logger := requestLogger(c)
@@ -500,10 +509,9 @@ func (h *restHandler) runScenario(c *gin.Context) {
 		if nodeCount <= 0 {
 			nodeCount = 10
 		}
+		DHTScenarioExecutionsTotal.WithLabelValues("bootstrap", "started").Inc()
 		go func() {
-			if err := h.orch.ScenarioBootstrap(bgCtx, nodeCount); err != nil {
-				logger.Warn("scenario bootstrap error", zap.Error(err))
-			}
+			observeScenarioResult(logger, "bootstrap", h.orch.ScenarioBootstrap(bgCtx, nodeCount))
 		}()
 	case "churn":
 		nodeCount := body.NodeCount
@@ -514,33 +522,29 @@ func (h *restHandler) runScenario(c *gin.Context) {
 		if dur <= 0 {
 			dur = 30 * time.Second
 		}
+		DHTScenarioExecutionsTotal.WithLabelValues("churn", "started").Inc()
 		go func() {
-			if err := h.orch.ScenarioChurn(bgCtx, dur, nodeCount); err != nil {
-				logger.Warn("scenario churn error", zap.Error(err))
-			}
+			observeScenarioResult(logger, "churn", h.orch.ScenarioChurn(bgCtx, dur, nodeCount))
 		}()
 	case "partition":
 		keys := []string{"p-key-0", "p-key-1", "p-key-2", "p-key-3"}
+		DHTScenarioExecutionsTotal.WithLabelValues("partition", "started").Inc()
 		go func() {
-			if err := h.orch.ScenarioPartition(bgCtx, keys, 2*time.Second); err != nil {
-				logger.Warn("scenario partition error", zap.Error(err))
-			}
+			observeScenarioResult(logger, "partition", h.orch.ScenarioPartition(bgCtx, keys, 2*time.Second))
 		}()
 	case "hotkey":
 		keyCount := body.KeyCount
 		if keyCount <= 0 {
 			keyCount = 1000
 		}
+		DHTScenarioExecutionsTotal.WithLabelValues("hotkey", "started").Inc()
 		go func() {
-			if err := h.orch.ScenarioHotKey(bgCtx, keyCount); err != nil {
-				logger.Warn("scenario hotkey error", zap.Error(err))
-			}
+			observeScenarioResult(logger, "hotkey", h.orch.ScenarioHotKey(bgCtx, keyCount))
 		}()
 	case "benchmark":
+		DHTScenarioExecutionsTotal.WithLabelValues("benchmark", "started").Inc()
 		go func() {
-			if err := h.orch.ScenarioBenchmark(bgCtx, 10, 50, 20); err != nil {
-				logger.Warn("scenario benchmark error", zap.Error(err))
-			}
+			observeScenarioResult(logger, "benchmark", h.orch.ScenarioBenchmark(bgCtx, 10, 50, 20))
 		}()
 	default:
 		runErr = fmt.Errorf("unknown scenario %q", name)
