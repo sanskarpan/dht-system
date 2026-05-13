@@ -2,6 +2,9 @@ import { expect, test } from '@playwright/test';
 
 test.describe('DHT smoke suite', () => {
   test('covers the shipped UI and core gateway flows', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('dht-tutorial-done');
+    });
     await page.goto('/');
 
     await expect(page.getByRole('button', { name: 'Skip tour' })).toBeVisible();
