@@ -313,3 +313,51 @@ func TestSpawnNodeAcceptsValidAddr(t *testing.T) {
 		t.Fatalf("spawnNode valid addr status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestNodeHandlersRejectShortHexIDs(t *testing.T) {
+	_, server := buildTestServer(t, "chord", 1)
+
+	for _, path := range []struct {
+		method string
+		url    string
+	}{
+		{method: http.MethodGet, url: "/api/v1/nodes/abc"},
+		{method: http.MethodDelete, url: "/api/v1/nodes/abc"},
+		{method: http.MethodPost, url: "/api/v1/nodes/abc/crash"},
+	} {
+		req := httptest.NewRequest(path.method, path.url, nil)
+		rec := httptest.NewRecorder()
+		server.Router().ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s %s short node id status=%d body=%s", path.method, path.url, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+func TestNodeHandlersAcceptExactHexIDs(t *testing.T) {
+	orch, server := buildTestServer(t, "chord", 1)
+	state := orch.GetNetworkState()
+	if len(state.Nodes) == 0 {
+		t.Fatal("expected at least one node")
+	}
+	fullID := state.Nodes[0].ID
+	if len(fullID) != 40 {
+		t.Fatalf("test node id length=%d want 40", len(fullID))
+	}
+
+	for _, path := range []struct {
+		method string
+		url    string
+	}{
+		{method: http.MethodGet, url: "/api/v1/nodes/" + fullID},
+		{method: http.MethodDelete, url: "/api/v1/nodes/" + fullID},
+		{method: http.MethodPost, url: "/api/v1/nodes/" + fullID + "/crash"},
+	} {
+		req := httptest.NewRequest(path.method, path.url, nil)
+		rec := httptest.NewRecorder()
+		server.Router().ServeHTTP(rec, req)
+		if rec.Code == http.StatusBadRequest {
+			t.Fatalf("%s %s exact node id rejected: %s", path.method, path.url, rec.Body.String())
+		}
+	}
+}

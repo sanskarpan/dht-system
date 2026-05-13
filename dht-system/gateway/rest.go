@@ -280,7 +280,7 @@ func (h *restHandler) spawnNode(c *gin.Context) {
 func (h *restHandler) killNode(c *gin.Context) {
 	id := c.Param("id")
 	if !isHexNodeID(id) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid node id: must be a hex string up to 40 chars"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid node id: must be a 40-character hex string"})
 		return
 	}
 	addr := h.resolveAddr(id)
@@ -298,7 +298,7 @@ func (h *restHandler) killNode(c *gin.Context) {
 func (h *restHandler) crashNode(c *gin.Context) {
 	id := c.Param("id")
 	if !isHexNodeID(id) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid node id: must be a hex string up to 40 chars"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid node id: must be a 40-character hex string"})
 		return
 	}
 	addr := h.resolveAddr(id)
@@ -316,7 +316,7 @@ func (h *restHandler) crashNode(c *gin.Context) {
 func (h *restHandler) getNode(c *gin.Context) {
 	id := c.Param("id")
 	if !isHexNodeID(id) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid node id: must be a hex string up to 40 chars"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid node id: must be a 40-character hex string"})
 		return
 	}
 	state := h.orch.GetNetworkState()
@@ -581,9 +581,9 @@ func isValidAddr(s string) bool {
 	return err == nil && portNum > 0 && portNum <= 65535
 }
 
-// isHexNodeID returns true when s is a non-empty hex string of at most 40 chars.
+// isHexNodeID returns true when s is a 40-character SHA-1 hex node ID.
 func isHexNodeID(s string) bool {
-	if s == "" || len(s) > 40 {
+	if len(s) != 40 {
 		return false
 	}
 	for _, r := range s {
