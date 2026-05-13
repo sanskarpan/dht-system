@@ -17,7 +17,7 @@ const MetricsPanel = lazy(() => import('@/components/MetricsPanel'));
 const ScenarioRunner = lazy(() => import('@/components/ScenarioRunner'));
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 5000, refetchInterval: 5000 } },
+  defaultOptions: { queries: { staleTime: 5000 } },
 });
 
 const WS_URL = `ws://${window.location.host}/ws`;
