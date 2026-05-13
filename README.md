@@ -260,6 +260,8 @@ frontend/
     └── api/         Typed fetch client
 ```
 
+`frontend/` is a separate Go module boundary so repo-wide commands like `go test ./...` stay focused on project-owned Go code and do not descend into the Go helper package shipped inside `node_modules`.
+
 ### Chord Protocol
 
 Chord organizes nodes on a 160-bit circular ID space. Each node maintains:
