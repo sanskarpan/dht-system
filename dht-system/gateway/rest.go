@@ -477,6 +477,7 @@ func (h *restHandler) listScenarios(c *gin.Context) {
 
 func (h *restHandler) runScenario(c *gin.Context) {
 	name := c.Param("name")
+	logger := requestLogger(c)
 	// Scenarios run in background goroutines; use a detached context so the
 	// scenario is not canceled when the HTTP response is sent.
 	bgCtx := context.Background()
@@ -501,7 +502,7 @@ func (h *restHandler) runScenario(c *gin.Context) {
 		}
 		go func() {
 			if err := h.orch.ScenarioBootstrap(bgCtx, nodeCount); err != nil {
-				zap.L().Warn("scenario bootstrap error", zap.Error(err))
+				logger.Warn("scenario bootstrap error", zap.Error(err))
 			}
 		}()
 	case "churn":
@@ -515,14 +516,14 @@ func (h *restHandler) runScenario(c *gin.Context) {
 		}
 		go func() {
 			if err := h.orch.ScenarioChurn(bgCtx, dur, nodeCount); err != nil {
-				zap.L().Warn("scenario churn error", zap.Error(err))
+				logger.Warn("scenario churn error", zap.Error(err))
 			}
 		}()
 	case "partition":
 		keys := []string{"p-key-0", "p-key-1", "p-key-2", "p-key-3"}
 		go func() {
 			if err := h.orch.ScenarioPartition(bgCtx, keys, 2*time.Second); err != nil {
-				zap.L().Warn("scenario partition error", zap.Error(err))
+				logger.Warn("scenario partition error", zap.Error(err))
 			}
 		}()
 	case "hotkey":
@@ -532,13 +533,13 @@ func (h *restHandler) runScenario(c *gin.Context) {
 		}
 		go func() {
 			if err := h.orch.ScenarioHotKey(bgCtx, keyCount); err != nil {
-				zap.L().Warn("scenario hotkey error", zap.Error(err))
+				logger.Warn("scenario hotkey error", zap.Error(err))
 			}
 		}()
 	case "benchmark":
 		go func() {
 			if err := h.orch.ScenarioBenchmark(bgCtx, 10, 50, 20); err != nil {
-				zap.L().Warn("scenario benchmark error", zap.Error(err))
+				logger.Warn("scenario benchmark error", zap.Error(err))
 			}
 		}()
 	default:
