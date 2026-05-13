@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,8 +25,20 @@ type Server struct {
 	port   int
 }
 
+const defaultFrontendDistRoot = "./frontend/dist"
+
+type frontendAssets struct {
+	root    string
+	ready   bool
+	missing []string
+}
+
 // NewServer creates and configures the HTTP/WS gateway server.
 func NewServer(orch *simulation.Orchestrator, bus *events.EventBus, port int) *Server {
+	return newServerWithFrontendAssets(orch, bus, port, defaultFrontendDistRoot)
+}
+
+func newServerWithFrontendAssets(orch *simulation.Orchestrator, bus *events.EventBus, port int, frontendRoot string) *Server {
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()
@@ -61,17 +75,63 @@ func NewServer(orch *simulation.Orchestrator, bus *events.EventBus, port int) *S
 	r.GET("/ws", hub.HandleUpgrade)
 
 	// Serve frontend static files
-	r.Static("/assets", "./frontend/dist/assets")
-	r.StaticFile("/favicon.ico", "./frontend/dist/favicon.ico")
+	assets := detectFrontendAssets(frontendRoot)
+	if !assets.ready {
+		zap.L().Warn("frontend assets missing; gateway will serve API-only mode",
+			zap.String("root", assets.root),
+			zap.Strings("missing", assets.missing),
+		)
+	}
+
+	unavailable := func(c *gin.Context) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "frontend assets are not built",
+			"hint":  "run `cd frontend && npm run build` before starting the gateway",
+		})
+	}
+
+	if assets.ready {
+		r.Static("/assets", filepath.Join(assets.root, "assets"))
+		r.StaticFile("/favicon.ico", filepath.Join(assets.root, "favicon.ico"))
+	} else {
+		r.GET("/assets/*filepath", unavailable)
+		r.HEAD("/assets/*filepath", unavailable)
+		r.GET("/favicon.ico", unavailable)
+		r.HEAD("/favicon.ico", unavailable)
+	}
 	r.NoRoute(func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") || c.Request.URL.Path == "/api" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		c.File("./frontend/dist/index.html")
+		if !assets.ready {
+			unavailable(c)
+			return
+		}
+		c.File(filepath.Join(assets.root, "index.html"))
 	})
 
 	return &Server{orch: orch, hub: hub, router: r, port: port}
+}
+
+func detectFrontendAssets(root string) frontendAssets {
+	missing := make([]string, 0, 3)
+	required := []string{
+		"index.html",
+		"assets",
+		"favicon.ico",
+	}
+	for _, name := range required {
+		path := filepath.Join(root, name)
+		if _, err := os.Stat(path); err != nil {
+			missing = append(missing, path)
+		}
+	}
+	return frontendAssets{
+		root:    root,
+		ready:   len(missing) == 0,
+		missing: missing,
+	}
 }
 
 // Run starts the HTTP server and shuts it down when ctx is canceled.
