@@ -145,7 +145,7 @@ export default function Sidebar() {
   };
 
   return (
-    <div className="w-64 shrink-0 border-r border-slate-800 bg-slate-950 flex flex-col gap-4 p-4 overflow-y-auto">
+    <div className="w-full lg:w-64 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-950 flex flex-col gap-4 p-4 overflow-y-auto max-h-[45vh] lg:max-h-none">
       <div>
         <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Protocol</p>
         <div className="flex gap-2">

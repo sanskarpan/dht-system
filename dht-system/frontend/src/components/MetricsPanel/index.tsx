@@ -136,11 +136,11 @@ export default function MetricsPanel() {
   const logN = nodeCount > 0 ? Math.ceil(Math.log2(nodeCount)) : 0;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
       <h2 className="text-slate-200 font-semibold">Performance Metrics</h2>
 
       {/* Top stat cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="bg-slate-900 rounded border border-slate-800 p-4 text-center">
           <p className="text-2xl font-bold text-slate-200">{nodeCount}</p>
           <p className="text-xs text-slate-500">Nodes</p>
@@ -160,7 +160,7 @@ export default function MetricsPanel() {
       </div>
 
       {/* Secondary metric cards: stabilize rate + replication lag */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Stabilization cycles/s gauge card */}
         <div className="bg-slate-900 rounded border border-slate-800 p-4">
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Stabilize Rate</p>

@@ -43,9 +43,9 @@ export default function RingVisualizer() {
   }, []);
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-0 flex-col lg:flex-row">
       <Sidebar />
-      <div className="flex-1 flex flex-col">
+      <div className="flex min-h-0 flex-1 flex-col">
         {/* Status bar */}
         <div className="flex items-center gap-4 px-4 py-2 border-b border-slate-800 text-xs text-slate-400 shrink-0">
           <span>{nodeCount} nodes</span>
@@ -61,7 +61,7 @@ export default function RingVisualizer() {
           </label>
         </div>
         {/* Canvas */}
-        <div ref={containerRef} className="flex-1 overflow-hidden">
+        <div ref={containerRef} className="flex-1 min-h-0 overflow-hidden">
           {dimensions.width > 0 && (
             <RingCanvas
               width={dimensions.width}
