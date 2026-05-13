@@ -2,6 +2,7 @@ package replication
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/sanskarpan/dht-system/dht-system/internal/store"
@@ -9,6 +10,7 @@ import (
 )
 
 type quorumMockTransport struct {
+	mu      sync.Mutex
 	entries map[string]*store.ValueEntry
 	writes  map[string]*store.ValueEntry
 }
@@ -52,6 +54,9 @@ func (m *quorumMockTransport) GetEntry(_ context.Context, target transport.NodeR
 	return entry.Clone(), nil
 }
 func (m *quorumMockTransport) PutEntry(_ context.Context, target transport.NodeRef, _ [20]byte, entry *store.ValueEntry) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if m.writes == nil {
 		m.writes = make(map[string]*store.ValueEntry)
 	}
