@@ -131,6 +131,32 @@ func TestStartNetworkResetsExistingClusterAndAppliesProtocol(t *testing.T) {
 	}
 }
 
+func TestStartNetworkRejectsInvalidProtocolWithoutResettingCluster(t *testing.T) {
+	orch, server := buildTestServer(t, "chord", 2)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/network/start",
+		bytes.NewBufferString(`{"protocol":"not-a-protocol","nodeCount":3}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	server.Router().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("startNetwork invalid protocol status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	state := orch.GetNetworkState()
+	if state.Protocol != "chord" {
+		t.Fatalf("protocol=%q want %q", state.Protocol, "chord")
+	}
+	if len(state.Nodes) != 2 {
+		t.Fatalf("node count=%d want %d", len(state.Nodes), 2)
+	}
+}
+
 func TestFaultInjectionEndpoints(t *testing.T) {
 	orch, server := buildTestServer(t, "kademlia", 4)
 	state := orch.GetNetworkState()

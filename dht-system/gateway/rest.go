@@ -71,14 +71,19 @@ func (h *restHandler) startNetwork(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "nodeCount must be greater than 0"})
 		return
 	}
+	nextCfg := h.orch.OrchestratorConfig()
+	if body.Protocol != "" {
+		var err error
+		nextCfg, err = mergeConfig(nextCfg, configPatch{Protocol: &body.Protocol})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
 	if h.orch.NodeCount() > 0 {
 		h.orch.Reset()
 	}
-	if body.Protocol != "" {
-		cfg := h.orch.OrchestratorConfig()
-		cfg.Protocol = normalizeProtocol(body.Protocol)
-		h.orch.UpdateConfig(cfg)
-	}
+	h.orch.UpdateConfig(nextCfg)
 	for i := 0; i < body.NodeCount; i++ {
 		if _, err := h.orch.SpawnNode(""); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
