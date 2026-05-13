@@ -34,17 +34,19 @@ var upgrader = gorillaws.Upgrader{
 type client struct {
 	conn  *gorillaws.Conn
 	send  chan events.Event
+	done  chan struct{}
 	types []events.EventType
 	mu    sync.Mutex
 }
 
 // Hub manages all WebSocket clients.
 type Hub struct {
-	mu      sync.RWMutex
-	clients map[*client]bool
-	bus     *events.EventBus
-	orch    *simulation.Orchestrator
-	stopCh  chan struct{}
+	mu       sync.RWMutex
+	clients  map[*client]bool
+	bus      *events.EventBus
+	orch     *simulation.Orchestrator
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 // NewHub creates a Hub.
@@ -79,6 +81,28 @@ func (h *Hub) Run() {
 			h.broadcastRingState()
 		}
 	}
+}
+
+// Stop drains the hub by preventing new broadcasts and closing active client sockets.
+func (h *Hub) Stop() {
+	h.stopOnce.Do(func() {
+		close(h.stopCh)
+
+		h.mu.Lock()
+		clients := make([]*client, 0, len(h.clients))
+		for c := range h.clients {
+			clients = append(clients, c)
+		}
+		h.clients = make(map[*client]bool)
+		h.mu.Unlock()
+
+		for _, c := range clients {
+			close(c.done)
+			if c.conn != nil {
+				_ = c.conn.Close()
+			}
+		}
+	})
 }
 
 func (h *Hub) broadcast(event events.Event) {
@@ -152,6 +176,7 @@ func (h *Hub) HandleUpgrade(c *gin.Context) {
 	cl := &client{
 		conn:  conn,
 		send:  make(chan events.Event, 256),
+		done:  make(chan struct{}),
 		types: nil,
 	}
 
@@ -183,9 +208,10 @@ func (h *Hub) writePump(cl *client) {
 
 	for {
 		select {
+		case <-cl.done:
+			return
 		case event, ok := <-cl.send:
 			if !ok {
-				_ = cl.conn.WriteMessage(gorillaws.CloseMessage, []byte{})
 				return
 			}
 			if err := cl.conn.WriteJSON(event); err != nil {

@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -71,8 +73,8 @@ func NewServer(orch *simulation.Orchestrator, bus *events.EventBus, port int) *S
 	return &Server{orch: orch, hub: hub, router: r, port: port}
 }
 
-// Run starts the HTTP server (blocking).
-func (s *Server) Run() error {
+// Run starts the HTTP server and shuts it down when ctx is canceled.
+func (s *Server) Run(ctx context.Context) error {
 	zap.L().Info("DHT Gateway listening", zap.Int("port", s.port))
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", s.port),
@@ -82,7 +84,30 @@ func (s *Server) Run() error {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	return srv.ListenAndServe()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		s.hub.Stop()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	}
 }
 
 // Router returns the gin engine (for testing).

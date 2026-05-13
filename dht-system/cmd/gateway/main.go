@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 
 	"go.uber.org/zap"
 
@@ -55,7 +58,10 @@ func main() {
 	logger.Info("DHT System started", zap.String("protocol", protocol), zap.Int("nodes", orch.NodeCount()))
 
 	srv := gateway.NewServer(orch, bus, port)
-	if err := srv.Run(); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := srv.Run(ctx); err != nil {
 		log.Fatal(err)
 	}
 }
