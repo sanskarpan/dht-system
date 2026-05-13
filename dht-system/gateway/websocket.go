@@ -33,11 +33,12 @@ var upgrader = gorillaws.Upgrader{
 }
 
 type client struct {
-	conn  *gorillaws.Conn
-	send  chan events.Event
-	done  chan struct{}
-	types []events.EventType
-	mu    sync.Mutex
+	conn     *gorillaws.Conn
+	send     chan events.Event
+	done     chan struct{}
+	doneOnce sync.Once
+	types    []events.EventType
+	mu       sync.Mutex
 }
 
 // Hub manages all WebSocket clients.
@@ -98,11 +99,17 @@ func (h *Hub) Stop() {
 		h.mu.Unlock()
 
 		for _, c := range clients {
-			close(c.done)
+			c.stop()
 			if c.conn != nil {
 				_ = c.conn.Close()
 			}
 		}
+	})
+}
+
+func (c *client) stop() {
+	c.doneOnce.Do(func() {
+		close(c.done)
 	})
 }
 
@@ -184,6 +191,7 @@ func (h *Hub) HandleUpgrade(c *gin.Context) {
 	h.mu.Lock()
 	h.clients[cl] = true
 	h.mu.Unlock()
+	DHTWebSocketClientsConnected.Inc()
 
 	// Send current ring state on connect
 	state := h.orch.GetNetworkState()
@@ -205,6 +213,7 @@ func (h *Hub) writePump(cl *client) {
 		h.mu.Lock()
 		delete(h.clients, cl)
 		h.mu.Unlock()
+		DHTWebSocketClientsConnected.Dec()
 	}()
 
 	for {
@@ -227,9 +236,7 @@ func (h *Hub) writePump(cl *client) {
 }
 
 func (h *Hub) readPump(cl *client) {
-	defer func() {
-		// writePump handles cleanup
-	}()
+	defer cl.stop()
 
 	cl.conn.SetReadDeadline(time.Now().Add(wsReadDeadline))
 	cl.conn.SetPongHandler(func(string) error {
