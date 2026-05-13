@@ -144,7 +144,7 @@ export interface NodeJoinPayload {
   predecessor?: string;
 }
 
-export interface LookupHopPayload extends HopEvent {}
+export type LookupHopPayload = HopEvent;
 
 export interface LookupCompletePayload {
   key: string;
