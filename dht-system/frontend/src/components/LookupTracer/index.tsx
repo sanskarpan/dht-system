@@ -300,8 +300,8 @@ export default function LookupTracer() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-slate-200 font-semibold">Lookup Tracer</h2>
         <button
           onClick={() => setCompareOpen((v) => !v)}
@@ -319,7 +319,7 @@ export default function LookupTracer() {
       {/* Input row                                                           */}
       {/* ------------------------------------------------------------------ */}
       <div>
-        <div className="flex gap-3 mb-2">
+        <div className="flex flex-col gap-3 mb-2 sm:flex-row">
           <input
             value={key}
             onChange={(e) => setKey(e.target.value)}
@@ -357,7 +357,7 @@ export default function LookupTracer() {
       {/* ------------------------------------------------------------------ */}
       {trace && (
         <div className="bg-slate-900 rounded border border-slate-800 p-4">
-          <div className="grid grid-cols-3 gap-4 mb-4 text-center">
+          <div className="grid grid-cols-1 gap-4 mb-4 text-center sm:grid-cols-3">
             <div>
               <p className="text-2xl font-bold text-slate-200">{trace.totalHops}</p>
               <p className="text-xs text-slate-500">Hops</p>
