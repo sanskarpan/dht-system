@@ -28,9 +28,10 @@ type Server struct {
 const defaultFrontendDistRoot = "./frontend/dist"
 
 type frontendAssets struct {
-	root    string
-	ready   bool
-	missing []string
+	root       string
+	ready      bool
+	hasFavicon bool
+	missing    []string
 }
 
 // NewServer creates and configures the HTTP/WS gateway server.
@@ -92,7 +93,16 @@ func newServerWithFrontendAssets(orch *simulation.Orchestrator, bus *events.Even
 
 	if assets.ready {
 		r.Static("/assets", filepath.Join(assets.root, "assets"))
-		r.StaticFile("/favicon.ico", filepath.Join(assets.root, "favicon.ico"))
+		if assets.hasFavicon {
+			r.StaticFile("/favicon.ico", filepath.Join(assets.root, "favicon.ico"))
+		} else {
+			r.GET("/favicon.ico", func(c *gin.Context) {
+				c.Status(http.StatusNotFound)
+			})
+			r.HEAD("/favicon.ico", func(c *gin.Context) {
+				c.Status(http.StatusNotFound)
+			})
+		}
 	} else {
 		r.GET("/assets/*filepath", unavailable)
 		r.HEAD("/assets/*filepath", unavailable)
@@ -115,11 +125,10 @@ func newServerWithFrontendAssets(orch *simulation.Orchestrator, bus *events.Even
 }
 
 func detectFrontendAssets(root string) frontendAssets {
-	missing := make([]string, 0, 3)
+	missing := make([]string, 0, 2)
 	required := []string{
 		"index.html",
 		"assets",
-		"favicon.ico",
 	}
 	for _, name := range required {
 		path := filepath.Join(root, name)
@@ -127,10 +136,15 @@ func detectFrontendAssets(root string) frontendAssets {
 			missing = append(missing, path)
 		}
 	}
+	hasFavicon := false
+	if _, err := os.Stat(filepath.Join(root, "favicon.ico")); err == nil {
+		hasFavicon = true
+	}
 	return frontendAssets{
-		root:    root,
-		ready:   len(missing) == 0,
-		missing: missing,
+		root:       root,
+		ready:      len(missing) == 0,
+		hasFavicon: hasFavicon,
+		missing:    missing,
 	}
 }
 

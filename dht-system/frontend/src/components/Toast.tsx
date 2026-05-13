@@ -1,49 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { create } from 'zustand';
 
-// ── Types ────────────────────────────────────────────────────────────────────
+import { type ToastType, useToastStore } from '@/components/toastStore';
 
-export type ToastType = 'success' | 'error' | 'info';
-
-interface ToastItem {
+interface ToastRecord {
   id: number;
   type: ToastType;
   message: string;
 }
-
-interface ToastStore {
-  toasts: ToastItem[];
-  add: (type: ToastType, message: string) => void;
-  remove: (id: number) => void;
-}
-
-// ── Zustand store ─────────────────────────────────────────────────────────────
-
-let _nextId = 1;
-const MAX_TOASTS = 5;
-
-const useToastStore = create<ToastStore>((set) => ({
-  toasts: [],
-  add: (type, message) =>
-    set((state) => {
-      const newToast: ToastItem = { id: _nextId++, type, message };
-      const updated = [...state.toasts, newToast];
-      // Keep only the most recent MAX_TOASTS entries
-      return { toasts: updated.slice(-MAX_TOASTS) };
-    }),
-  remove: (id) =>
-    set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
-}));
-
-// ── Public API ────────────────────────────────────────────────────────────────
-
-export const toast = {
-  success: (message: string) => useToastStore.getState().add('success', message),
-  error: (message: string) => useToastStore.getState().add('error', message),
-  info: (message: string) => useToastStore.getState().add('info', message),
-};
-
-// ── Individual toast item ─────────────────────────────────────────────────────
 
 const DISMISS_DELAY = 4000; // ms
 
@@ -65,7 +28,7 @@ const iconBg: Record<ToastType, string> = {
   info:    'bg-blue-600',
 };
 
-function ToastItem({ toast: item }: { toast: ToastItem }) {
+function ToastItem({ toast: item }: { toast: ToastRecord }) {
   const remove = useToastStore((s) => s.remove);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -97,8 +60,6 @@ function ToastItem({ toast: item }: { toast: ToastItem }) {
     </div>
   );
 }
-
-// ── Toast container (render once in App) ─────────────────────────────────────
 
 export default function ToastContainer() {
   const toasts = useToastStore((s) => s.toasts);

@@ -12,6 +12,7 @@ export function useWebSocket({ url, onMessage, onConnect, onDisconnect }: UseWeb
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const connectRef = useRef<() => void>(() => {});
   const subscribedTypesRef = useRef<EventType[]>([]);
   const reconnectAttemptRef = useRef(0);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'disconnected'>('connecting');
@@ -56,7 +57,7 @@ export function useWebSocket({ url, onMessage, onConnect, onDisconnect }: UseWeb
       reconnectAttemptRef.current += 1;
       const delay = Math.min(30000, 1000 * (2 ** attempt)) + Math.floor(Math.random() * 250);
       reconnectTimer.current = setTimeout(() => {
-        if (mountedRef.current) connect();
+        if (mountedRef.current) connectRef.current();
       }, delay);
     };
 
@@ -64,6 +65,10 @@ export function useWebSocket({ url, onMessage, onConnect, onDisconnect }: UseWeb
       ws.close();
     };
   }, [url, onMessage, onConnect, onDisconnect]);
+
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   const subscribe = useCallback((types: EventType[]) => {
     subscribedTypesRef.current = types;
@@ -74,10 +79,13 @@ export function useWebSocket({ url, onMessage, onConnect, onDisconnect }: UseWeb
 
   useEffect(() => {
     mountedRef.current = true;
-    connect();
+    const startTimer = setTimeout(() => {
+      if (mountedRef.current) connect();
+    }, 0);
 
     return () => {
       mountedRef.current = false;
+      clearTimeout(startTimer);
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
     };
