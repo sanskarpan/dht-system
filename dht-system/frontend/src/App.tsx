@@ -5,7 +5,8 @@ import { useDHTStore } from '@/store/dhtStore';
 import type { DHTStore } from '@/store/dhtStore';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import type { DHTEvent } from '@/types/dht';
-import ToastContainer, { toast } from '@/components/Toast';
+import ToastContainer from '@/components/Toast';
+import { toast } from '@/components/toastStore';
 import TutorialOverlay from '@/components/TutorialOverlay';
 import * as api from '@/api/client';
 
