@@ -219,6 +219,21 @@ simulation:
   sim_loss_rate: 0.0     # packet loss rate [0.0–1.0]
 ```
 
+### Gateway Security Controls
+
+Mutating routes can be protected without affecting local development defaults.
+
+```bash
+GATEWAY_API_TOKEN=change-me \
+GATEWAY_MUTATION_LIMIT_PER_MINUTE=60 \
+./bin/gateway
+```
+
+- `GATEWAY_API_TOKEN` enables API-key protection for mutating routes.
+- `GATEWAY_MUTATION_LIMIT_PER_MINUTE` applies a per-IP fixed-window limit to mutating routes.
+- Send the token as either `X-API-Key: ...` or `Authorization: Bearer ...`.
+- Read-only routes remain open so dashboards and health checks continue to work by default.
+
 ## Architecture
 
 ### Packages
