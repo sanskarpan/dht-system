@@ -20,7 +20,7 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 5000 } },
 });
 
-const WS_URL = `ws://${window.location.host}/ws`;
+const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`;
 
 function AppInner() {
   const applyEvent = useDHTStore((s: DHTStore) => s.applyEvent);
