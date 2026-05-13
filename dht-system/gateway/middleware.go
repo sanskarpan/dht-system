@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -28,4 +29,20 @@ func loggingMiddleware() gin.HandlerFunc {
 			param.ClientIP + " " + param.Latency.String() +
 			" " + time.Now().Format(time.RFC3339) + "\n"
 	})
+}
+
+// requestBodyLimitMiddleware rejects oversized request bodies before handlers
+// attempt to parse them. It also wraps the body reader so chunked requests are
+// capped even when Content-Length is absent.
+func requestBodyLimitMiddleware(maxBytes int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Body != nil {
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
+		}
+		if c.Request.ContentLength > maxBytes {
+			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+			return
+		}
+		c.Next()
+	}
 }

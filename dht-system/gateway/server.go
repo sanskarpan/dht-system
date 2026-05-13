@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -28,6 +29,7 @@ func NewServer(orch *simulation.Orchestrator, bus *events.EventBus, port int) *S
 	r.HandleMethodNotAllowed = true
 	r.Use(gin.Recovery())
 	r.Use(corsMiddleware())
+	r.Use(requestBodyLimitMiddleware(1 << 20))
 	r.Use(loggingMiddleware())
 	r.NoMethod(func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") || c.Request.URL.Path == "/api" {
@@ -72,7 +74,15 @@ func NewServer(orch *simulation.Orchestrator, bus *events.EventBus, port int) *S
 // Run starts the HTTP server (blocking).
 func (s *Server) Run() error {
 	zap.L().Info("DHT Gateway listening", zap.Int("port", s.port))
-	return s.router.Run(fmt.Sprintf(":%d", s.port))
+	srv := &http.Server{
+		Addr:              fmt.Sprintf(":%d", s.port),
+		Handler:           s.router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	return srv.ListenAndServe()
 }
 
 // Router returns the gin engine (for testing).
