@@ -4,7 +4,9 @@ export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // The E2E suite talks to one shared gateway instance, so parallel workers
+  // can interfere with each other's network state.
+  workers: 1,
   reporter: process.env.CI ? 'github' : 'list',
   expect: {
     timeout: 10_000,
