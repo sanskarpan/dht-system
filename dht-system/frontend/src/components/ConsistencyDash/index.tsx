@@ -556,11 +556,11 @@ export default function ConsistencyDash() {
   );
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <h2 className="text-slate-200 font-semibold mb-4">Consistency Dashboard</h2>
 
       {/* Quorum config cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-3">
         <div className="bg-slate-900 rounded border border-slate-800 p-4 text-center">
           <p className="text-2xl font-bold text-slate-200">{config?.writeQuorum ?? 2}</p>
           <p className="text-xs text-slate-500">Write Quorum (W)</p>
