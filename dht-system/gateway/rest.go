@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -260,7 +262,7 @@ func (h *restHandler) spawnNode(c *gin.Context) {
 		return
 	}
 	if body.Addr != "" && !isValidAddr(body.Addr) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "addr must be in host:port format"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "addr must be a valid host:port pair"})
 		return
 	}
 	node, err := h.orch.SpawnNode(body.Addr)
@@ -569,14 +571,14 @@ func (h *restHandler) resolveAddr(idOrAddr string) string {
 	return ""
 }
 
-// isValidAddr returns true when s looks like a host:port pair.
+// isValidAddr returns true when s is a valid host:port pair with a numeric port.
 func isValidAddr(s string) bool {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == ':' && i > 0 && i < len(s)-1 {
-			return true
-		}
+	host, port, err := net.SplitHostPort(s)
+	if err != nil || host == "" || port == "" {
+		return false
 	}
-	return false
+	portNum, err := strconv.Atoi(port)
+	return err == nil && portNum > 0 && portNum <= 65535
 }
 
 // isHexNodeID returns true when s is a non-empty hex string of at most 40 chars.

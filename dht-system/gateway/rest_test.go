@@ -277,3 +277,39 @@ func TestRunScenarioRejectsMalformedJSON(t *testing.T) {
 		t.Fatalf("runScenario malformed JSON status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestSpawnNodeRejectsMalformedAddr(t *testing.T) {
+	_, server := buildTestServer(t, "chord", 1)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/nodes",
+		bytes.NewBufferString(`{"addr":"not-an-addr"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	server.Router().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("spawnNode malformed addr status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSpawnNodeAcceptsValidAddr(t *testing.T) {
+	_, server := buildTestServer(t, "chord", 1)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/nodes",
+		bytes.NewBufferString(`{"addr":"127.0.0.1:9101"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	server.Router().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("spawnNode valid addr status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
