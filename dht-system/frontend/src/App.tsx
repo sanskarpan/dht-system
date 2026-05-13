@@ -170,14 +170,14 @@ function AppInner() {
         </div>
 
         {/* Nav */}
-        <nav className="flex h-full px-2">
+        <nav className="flex h-full min-w-0 flex-1 overflow-x-auto px-2">
           {navItems.map(({ to, label }) => (
             <NavLink
               key={to}
               to={to}
               end={to === '/'}
               className={({ isActive }) =>
-                `relative flex items-center px-4 py-3 text-xs font-semibold tracking-[0.1em] uppercase transition-colors ${
+                `relative flex shrink-0 items-center whitespace-nowrap px-4 py-3 text-xs font-semibold tracking-[0.1em] uppercase transition-colors ${
                   isActive
                     ? 'text-sky-300'
                     : 'text-slate-500 hover:text-slate-300'
