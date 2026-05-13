@@ -23,39 +23,41 @@ type restHandler struct {
 func registerRoutes(api *gin.RouterGroup, orch *simulation.Orchestrator) {
 	h := &restHandler{orch: orch}
 
-	// Network
-	api.POST("/network/start", h.startNetwork)
-	api.POST("/network/reset", h.resetNetwork)
+	// Read-only routes remain open for local development and dashboards.
 	api.GET("/network/state", h.getNetworkState)
 	api.GET("/network/config", h.getConfig)
-	api.PUT("/network/config", h.updateConfig)
-	api.POST("/network/partition", h.setPartition)
-	api.POST("/network/heal", h.healPartition)
 	api.GET("/network/faults", h.getFaults)
-	api.PUT("/network/links", h.setLinkLatency)
-	api.DELETE("/network/links", h.clearLinkLatencies)
+	api.GET("/nodes/:id", h.getNode)
+	api.GET("/kv/:key", h.getKey)
+	api.GET("/kv/:key/replicas", h.getKeyReplicas)
+	api.POST("/lookup", h.traceLookup)
+	api.GET("/scenarios", h.listScenarios)
+	api.GET("/metrics/json", h.getMetricsJSON)
+
+	// Mutating routes can be protected with API-key auth and/or rate limiting.
+	protected := api.Group("/")
+	protected.Use(mutationProtectionMiddleware(loadMutationSecurityConfig()))
+
+	// Network
+	protected.POST("/network/start", h.startNetwork)
+	protected.POST("/network/reset", h.resetNetwork)
+	protected.PUT("/network/config", h.updateConfig)
+	protected.POST("/network/partition", h.setPartition)
+	protected.POST("/network/heal", h.healPartition)
+	protected.PUT("/network/links", h.setLinkLatency)
+	protected.DELETE("/network/links", h.clearLinkLatencies)
 
 	// Nodes
-	api.POST("/nodes", h.spawnNode)
-	api.DELETE("/nodes/:id", h.killNode)
-	api.POST("/nodes/:id/crash", h.crashNode)
-	api.GET("/nodes/:id", h.getNode)
+	protected.POST("/nodes", h.spawnNode)
+	protected.DELETE("/nodes/:id", h.killNode)
+	protected.POST("/nodes/:id/crash", h.crashNode)
 
 	// KV
-	api.POST("/kv", h.putKey)
-	api.GET("/kv/:key", h.getKey)
-	api.DELETE("/kv/:key", h.deleteKey)
-	api.GET("/kv/:key/replicas", h.getKeyReplicas)
-
-	// Lookup
-	api.POST("/lookup", h.traceLookup)
+	protected.POST("/kv", h.putKey)
+	protected.DELETE("/kv/:key", h.deleteKey)
 
 	// Scenarios
-	api.GET("/scenarios", h.listScenarios)
-	api.POST("/scenarios/:name/run", h.runScenario)
-
-	// Metrics
-	api.GET("/metrics/json", h.getMetricsJSON)
+	protected.POST("/scenarios/:name/run", h.runScenario)
 }
 
 // Network handlers
