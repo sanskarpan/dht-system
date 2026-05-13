@@ -64,4 +64,18 @@ var (
 		Name:      "gossip_syncs_total",
 		Help:      "Total gossip sync operations.",
 	}, []string{"from_node"})
+
+	// DHTWebSocketClientsConnected tracks the current number of connected WebSocket clients.
+	DHTWebSocketClientsConnected = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "dht",
+		Name:      "websocket_clients_connected",
+		Help:      "Current number of connected WebSocket clients.",
+	})
+
+	// DHTScenarioExecutionsTotal counts scenario lifecycle transitions.
+	DHTScenarioExecutionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "dht",
+		Name:      "scenario_executions_total",
+		Help:      "Total scenario lifecycle transitions observed by the gateway.",
+	}, []string{"scenario", "status"})
 )
