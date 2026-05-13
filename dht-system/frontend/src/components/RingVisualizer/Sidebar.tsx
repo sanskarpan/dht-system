@@ -62,7 +62,7 @@ export default function Sidebar() {
     [nodeMap],
   );
 
-  // Local slider state — kept in sync with storeConfig on first load
+  // Local slider state — kept in sync with authoritative storeConfig whenever it changes.
   const [writeQuorum, setWriteQuorum] = useState(2);
   const [readQuorum, setReadQuorum] = useState(2);
   const [replicationN, setReplicationN] = useState(3);
@@ -70,10 +70,8 @@ export default function Sidebar() {
   const [simDelayMs, setSimDelayMs] = useState(0);
   const [simLossRate, setSimLossRate] = useState(0);
 
-  const initializedRef = useRef(false);
   useEffect(() => {
-    if (storeConfig && !initializedRef.current) {
-      initializedRef.current = true;
+    if (storeConfig) {
       setWriteQuorum(storeConfig.writeQuorum);
       setReadQuorum(storeConfig.readQuorum);
       setReplicationN(storeConfig.replicationN);
