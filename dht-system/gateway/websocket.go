@@ -11,6 +11,7 @@ import (
 	gorillaws "github.com/gorilla/websocket"
 	"github.com/sanskarpan/dht-system/dht-system/internal/events"
 	"github.com/sanskarpan/dht-system/dht-system/internal/simulation"
+	"go.uber.org/zap"
 )
 
 // WebSocket timing constants. Adjust via environment or config in production.
@@ -169,7 +170,7 @@ func matchEventTypes(types []events.EventType, t events.EventType) bool {
 func (h *Hub) HandleUpgrade(c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("WS upgrade error: %v", err)
+		requestLogger(c).Warn("WS upgrade error", zap.Error(err))
 		return
 	}
 

@@ -1,10 +1,13 @@
 package gateway
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/sanskarpan/dht-system/dht-system/internal/events"
 	"github.com/sanskarpan/dht-system/dht-system/internal/simulation"
 )
@@ -73,6 +76,46 @@ func TestMutationProtectionRateLimitsProtectedRoutes(t *testing.T) {
 		resp.Body.Close()
 		if resp.StatusCode != want {
 			t.Fatalf("request %d: expected %d, got %d", i, want, resp.StatusCode)
+		}
+	}
+}
+
+func TestRequestIDMiddlewareSetsHeaderAndStructuredLog(t *testing.T) {
+	oldWriter := gin.DefaultWriter
+	t.Cleanup(func() {
+		gin.DefaultWriter = oldWriter
+	})
+
+	var logs bytes.Buffer
+	gin.DefaultWriter = &logs
+
+	r := gin.New()
+	r.Use(requestIDMiddleware())
+	r.Use(loggingMiddleware())
+	r.GET("/health", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req.Header.Set("X-Request-Id", "req-123")
+	resp := httptest.NewRecorder()
+
+	r.ServeHTTP(resp, req)
+
+	if got := resp.Header().Get("X-Request-Id"); got != "req-123" {
+		t.Fatalf("expected request id header to be preserved, got %q", got)
+	}
+
+	line := logs.String()
+	for _, want := range []string{
+		"request_id=req-123",
+		"method=GET",
+		"path=/health",
+		"status=204",
+		"latency=",
+	} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("log line %q missing %q", line, want)
 		}
 	}
 }

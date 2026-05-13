@@ -1,6 +1,9 @@
 package gateway
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -9,7 +12,57 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
+
+const requestIDContextKey = "request_id"
+
+func requestIDMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		requestID := strings.TrimSpace(c.GetHeader("X-Request-Id"))
+		if requestID == "" {
+			requestID = newRequestID()
+		}
+		c.Set(requestIDContextKey, requestID)
+		c.Header("X-Request-Id", requestID)
+		c.Next()
+	}
+}
+
+func requestIDFromContext(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	if value, ok := c.Get(requestIDContextKey); ok {
+		if requestID, ok := value.(string); ok {
+			return requestID
+		}
+	}
+	return ""
+}
+
+func requestLogger(c *gin.Context) *zap.Logger {
+	fields := []zap.Field{}
+	if requestID := requestIDFromContext(c); requestID != "" {
+		fields = append(fields, zap.String("request_id", requestID))
+	}
+	if c != nil && c.Request != nil {
+		fields = append(fields,
+			zap.String("method", c.Request.Method),
+			zap.String("path", c.Request.URL.Path),
+			zap.String("client_ip", c.ClientIP()),
+		)
+	}
+	return zap.L().With(fields...)
+}
+
+func newRequestID() string {
+	var buf [16]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return fmt.Sprintf("req-%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(buf[:])
+}
 
 // NOTE: CORS wildcard is intentionally permissive for local development.
 // In production, replace "*" with an explicit origin allowlist controlled
@@ -29,9 +82,22 @@ func corsMiddleware() gin.HandlerFunc {
 
 func loggingMiddleware() gin.HandlerFunc {
 	return gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
-		return param.Method + " " + param.Path + " " +
-			param.ClientIP + " " + param.Latency.String() +
-			" " + time.Now().Format(time.RFC3339) + "\n"
+		requestID := ""
+		if value, ok := param.Keys[requestIDContextKey]; ok {
+			if v, ok := value.(string); ok {
+				requestID = v
+			}
+		}
+		return fmt.Sprintf(
+			"ts=%s request_id=%s method=%s path=%s status=%d latency=%s client_ip=%s\n",
+			time.Now().Format(time.RFC3339),
+			requestID,
+			param.Method,
+			param.Path,
+			param.StatusCode,
+			param.Latency.String(),
+			param.ClientIP,
+		)
 	})
 }
 
