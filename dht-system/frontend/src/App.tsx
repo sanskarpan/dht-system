@@ -25,9 +25,9 @@ const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${wind
 function AppInner() {
   const applyEvent = useDHTStore((s: DHTStore) => s.applyEvent);
   const setConnected = useDHTStore((s: DHTStore) => s.setConnected);
-  const connected = useDHTStore((s: DHTStore) => s.connected);
   const navigate = useNavigate();
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [clockTick, setClockTick] = useState(() => Date.now());
 
   const handleMessage = useCallback((event: DHTEvent) => {
     applyEvent(event);
@@ -41,12 +41,46 @@ function AppInner() {
     setConnected(false);
   }, [setConnected]);
 
-  const { subscribe } = useWebSocket({
+  const { subscribe, connectionStatus, lastMessageAt } = useWebSocket({
     url: WS_URL,
     onMessage: handleMessage,
     onConnect: handleConnect,
     onDisconnect: handleDisconnect,
   });
+
+  useEffect(() => {
+    const timer = setInterval(() => setClockTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isStale = connectionStatus === 'connected' && lastMessageAt !== null && clockTick - lastMessageAt > 10000;
+  const statusLabel = isStale
+    ? 'Stale'
+    : connectionStatus === 'connecting'
+      ? 'Connecting'
+    : connectionStatus === 'reconnecting'
+      ? 'Reconnecting'
+      : connectionStatus === 'connected'
+        ? 'Live'
+        : 'Offline';
+  const statusClass = isStale
+    ? 'border-amber-700/50 bg-amber-900/20 text-amber-400'
+    : connectionStatus === 'connecting'
+      ? 'border-sky-700/50 bg-sky-900/20 text-sky-400'
+    : connectionStatus === 'reconnecting'
+      ? 'border-sky-700/50 bg-sky-900/20 text-sky-400'
+      : connectionStatus === 'connected'
+        ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400'
+        : 'border-red-800/50 bg-red-900/20 text-red-400';
+  const dotClass = isStale
+    ? 'bg-amber-400'
+    : connectionStatus === 'connecting'
+      ? 'bg-sky-400 animate-pulse'
+    : connectionStatus === 'reconnecting'
+      ? 'bg-sky-400 animate-pulse'
+      : connectionStatus === 'connected'
+        ? 'bg-emerald-400 animate-conn-pulse'
+        : 'bg-red-500';
 
   useEffect(() => {
     subscribe(['node_join', 'node_leave', 'node_crash', 'stabilize', 'lookup_hop',
@@ -171,15 +205,9 @@ function AppInner() {
           >
             ?
           </button>
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-semibold tracking-wider uppercase transition-all ${
-            connected
-              ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400'
-              : 'border-red-800/50 bg-red-900/20 text-red-400'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${
-              connected ? 'bg-emerald-400 animate-conn-pulse' : 'bg-red-500'
-            }`} />
-            {connected ? 'Live' : 'Offline'}
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-semibold tracking-wider uppercase transition-all ${statusClass}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+            {statusLabel}
           </div>
         </div>
       </header>

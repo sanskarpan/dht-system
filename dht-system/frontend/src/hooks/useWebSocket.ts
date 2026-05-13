@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import type { DHTEvent, EventType } from '@/types/dht';
 
 interface UseWebSocketOptions {
@@ -13,15 +13,22 @@ export function useWebSocket({ url, onMessage, onConnect, onDisconnect }: UseWeb
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
   const subscribedTypesRef = useRef<EventType[]>([]);
+  const reconnectAttemptRef = useRef(0);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'disconnected'>('connecting');
+  const [lastMessageAt, setLastMessageAt] = useState<number | null>(null);
 
   const connect = useCallback(() => {
     if (!mountedRef.current) return;
 
+    setConnectionStatus(reconnectAttemptRef.current > 0 ? 'reconnecting' : 'connecting');
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {
       if (!mountedRef.current) return;
+      reconnectAttemptRef.current = 0;
+      setConnectionStatus('connected');
+      setLastMessageAt(Date.now());
       onConnect?.();
       // Re-subscribe if we had subscriptions
       if (subscribedTypesRef.current.length > 0) {
@@ -31,6 +38,7 @@ export function useWebSocket({ url, onMessage, onConnect, onDisconnect }: UseWeb
 
     ws.onmessage = (ev) => {
       if (!mountedRef.current) return;
+      setLastMessageAt(Date.now());
       try {
         const event = JSON.parse(ev.data) as DHTEvent;
         onMessage(event);
@@ -43,10 +51,13 @@ export function useWebSocket({ url, onMessage, onConnect, onDisconnect }: UseWeb
       if (!mountedRef.current) return;
       onDisconnect?.();
       wsRef.current = null;
-      // Auto-reconnect after 2s
+      setConnectionStatus('reconnecting');
+      const attempt = reconnectAttemptRef.current;
+      reconnectAttemptRef.current += 1;
+      const delay = Math.min(30000, 1000 * (2 ** attempt)) + Math.floor(Math.random() * 250);
       reconnectTimer.current = setTimeout(() => {
         if (mountedRef.current) connect();
-      }, 2000);
+      }, delay);
     };
 
     ws.onerror = () => {
@@ -72,5 +83,5 @@ export function useWebSocket({ url, onMessage, onConnect, onDisconnect }: UseWeb
     };
   }, [connect]);
 
-  return { subscribe };
+  return { subscribe, connectionStatus, lastMessageAt };
 }
