@@ -296,6 +296,24 @@ func TestUnknownAPIRoutesReturnJSON404(t *testing.T) {
 	}
 }
 
+func TestAPIRoutesReturnJSON405ForWrongMethod(t *testing.T) {
+	_, server := buildTestServer(t, "chord", 1)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/network/state", nil)
+	rec := httptest.NewRecorder()
+	server.Router().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("wrong method status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json; charset=utf-8" {
+		t.Fatalf("wrong method content-type=%q want JSON", ct)
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"error":"method not allowed"`)) {
+		t.Fatalf("wrong method body=%s", rec.Body.String())
+	}
+}
+
 func TestSpawnNodeRejectsMalformedAddr(t *testing.T) {
 	_, server := buildTestServer(t, "chord", 1)
 

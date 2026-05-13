@@ -25,9 +25,17 @@ func NewServer(orch *simulation.Orchestrator, bus *events.EventBus, port int) *S
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()
+	r.HandleMethodNotAllowed = true
 	r.Use(gin.Recovery())
 	r.Use(corsMiddleware())
 	r.Use(loggingMiddleware())
+	r.NoMethod(func(c *gin.Context) {
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") || c.Request.URL.Path == "/api" {
+			c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "method not allowed"})
+			return
+		}
+		c.Status(http.StatusMethodNotAllowed)
+	})
 
 	hub := NewHub(bus, orch)
 	go hub.Run()
