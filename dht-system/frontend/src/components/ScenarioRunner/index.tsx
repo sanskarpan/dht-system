@@ -209,8 +209,8 @@ export default function ScenarioRunner() {
   };
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-slate-200 font-semibold">Scenario Runner</h2>
         <button
           onClick={handleReset}
@@ -365,7 +365,7 @@ export default function ScenarioRunner() {
           </div>
 
           {/* Summary stats grid */}
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-1 gap-3 mb-4 sm:grid-cols-3">
             <div className="bg-slate-800 rounded p-3 text-center">
               <p className="text-xl font-bold text-slate-200">{resultSummary.totalNodes}</p>
               <p className="text-xs text-slate-500 mt-0.5">Nodes at End</p>
