@@ -314,6 +314,27 @@ func TestAPIRoutesReturnJSON405ForWrongMethod(t *testing.T) {
 	}
 }
 
+func TestOversizedRequestBodyRejected(t *testing.T) {
+	_, server := buildTestServer(t, "chord", 1)
+
+	largeValue := bytes.Repeat([]byte("a"), 1<<20)
+	body := append([]byte(`{"key":"too-big","value":"`), largeValue...)
+	body = append(body, []byte(`"}`)...)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/kv", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	server.Router().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized request status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"error":"request body too large"`)) {
+		t.Fatalf("oversized request body=%s", rec.Body.String())
+	}
+}
+
 func TestSpawnNodeRejectsMalformedAddr(t *testing.T) {
 	_, server := buildTestServer(t, "chord", 1)
 
