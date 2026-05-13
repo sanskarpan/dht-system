@@ -235,6 +235,18 @@ GATEWAY_MUTATION_LIMIT_PER_MINUTE=60 \
 - Send the token as either `X-API-Key: ...` or `Authorization: Bearer ...`.
 - Read-only routes remain open so dashboards and health checks continue to work by default.
 
+## Reverse Proxy And TLS
+
+The shipped frontend nginx example in [dht-system/frontend/nginx.conf](/Users/sanskar/dev/Research/Projects/DHT-System/dht-system/frontend/nginx.conf:1) is wired for the actual runtime paths:
+
+- `/api/` proxies to the gateway REST API at `http://gateway:8080`
+- `/ws` proxies WebSocket upgrades to the gateway at `http://gateway:8080/ws`
+- `/healthz` gives the frontend container a lightweight local readiness check
+
+For TLS termination, keep the `/api/` and `/ws` proxy blocks intact and change the server listener to `443 ssl http2` with your certificate paths. The important headers are `X-Forwarded-Proto`, `X-Forwarded-For`, `X-Real-IP`, and the WebSocket `Upgrade` / `Connection` pair.
+
+The root [docker-compose.yml](/Users/sanskar/dev/Research/Projects/DHT-System/docker-compose.yml:1) includes container health checks for the gateway and frontend services so you can detect startup problems without scraping logs.
+
 ## Architecture
 
 ### Packages
