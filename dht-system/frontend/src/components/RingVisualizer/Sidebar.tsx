@@ -1,49 +1,11 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDHTStore } from '@/store/dhtStore';
 import type { DHTStore } from '@/store/dhtStore';
 import * as api from '@/api/client';
 import type { LookupTrace } from '@/types/dht';
-import { toast } from '@/components/Toast';
-
-// Slider row: label on left, value badge on right, range input below
-function SliderRow({
-  label,
-  value,
-  min,
-  max,
-  step,
-  format,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  format: (v: number) => string;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div className="mb-3">
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-xs text-slate-400">{label}</span>
-        <span className="text-xs font-mono bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded">
-          {format(value)}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-blue-500 bg-slate-700"
-      />
-    </div>
-  );
-}
+import { toast } from '@/components/toastStore';
+import NetworkConfigPanel from '@/components/RingVisualizer/NetworkConfigPanel';
 
 export default function Sidebar() {
   const [keyInput, setKeyInput] = useState('');
@@ -62,25 +24,6 @@ export default function Sidebar() {
     [nodeMap],
   );
 
-  // Local slider state — kept in sync with authoritative storeConfig whenever it changes.
-  const [writeQuorum, setWriteQuorum] = useState(2);
-  const [readQuorum, setReadQuorum] = useState(2);
-  const [replicationN, setReplicationN] = useState(3);
-  const [stabilizeIntervalMs, setStabilizeIntervalMs] = useState(500);
-  const [simDelayMs, setSimDelayMs] = useState(0);
-  const [simLossRate, setSimLossRate] = useState(0);
-
-  useEffect(() => {
-    if (storeConfig) {
-      setWriteQuorum(storeConfig.writeQuorum);
-      setReadQuorum(storeConfig.readQuorum);
-      setReplicationN(storeConfig.replicationN);
-      setStabilizeIntervalMs(storeConfig.stabilizeIntervalMs);
-      setSimDelayMs(storeConfig.simDelayMs);
-      setSimLossRate(Math.round(storeConfig.simLossRate * 100));
-    }
-  }, [storeConfig]);
-
   const configMut = useMutation({
     mutationFn: (cfg: Parameters<typeof api.updateNetworkConfig>[0]) =>
       api.updateNetworkConfig(cfg),
@@ -89,13 +32,26 @@ export default function Sidebar() {
 
   // Debounce helper so rapid slider drags only fire one request per 300 ms
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sendConfig = useCallback(
-    (cfg: Parameters<typeof api.updateNetworkConfig>[0]) => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-      debounceTimer.current = setTimeout(() => configMut.mutate(cfg), 300);
-    },
-    [configMut.mutate],
-  );
+  useEffect(() => () => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+  }, []);
+
+  const sendConfig = (cfg: Parameters<typeof api.updateNetworkConfig>[0]) => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => configMut.mutate(cfg), 300);
+  };
+
+  const configSignature = storeConfig
+    ? [
+        storeConfig.protocol,
+        storeConfig.writeQuorum,
+        storeConfig.readQuorum,
+        storeConfig.replicationN,
+        storeConfig.stabilizeIntervalMs,
+        storeConfig.simDelayMs,
+        storeConfig.simLossRate,
+      ].join(':')
+    : 'config-default';
 
   const spawnMut = useMutation({
     mutationFn: () => api.spawnNode(),
@@ -309,92 +265,13 @@ export default function Sidebar() {
           </span>
         </button>
 
-        {netConfigOpen && (
+        {netConfigOpen && storeConfig && (
           <div className="px-3 pb-3 pt-1">
-            {/* Quorum sliders */}
-            <p className="text-xs text-slate-600 uppercase tracking-wider mb-2 mt-1">
-              Quorum
-            </p>
-
-            <SliderRow
-              label="N — replication factor"
-              value={replicationN}
-              min={1}
-              max={5}
-              step={1}
-              format={(v) => String(v)}
-              onChange={(v) => {
-                setReplicationN(v);
-                sendConfig({ replicationN: v });
-              }}
+            <NetworkConfigPanel
+              key={configSignature}
+              config={storeConfig}
+              onChange={sendConfig}
             />
-            <SliderRow
-              label="W — write quorum"
-              value={writeQuorum}
-              min={1}
-              max={5}
-              step={1}
-              format={(v) => String(v)}
-              onChange={(v) => {
-                setWriteQuorum(v);
-                sendConfig({ writeQuorum: v });
-              }}
-            />
-            <SliderRow
-              label="R — read quorum"
-              value={readQuorum}
-              min={1}
-              max={5}
-              step={1}
-              format={(v) => String(v)}
-              onChange={(v) => {
-                setReadQuorum(v);
-                sendConfig({ readQuorum: v });
-              }}
-            />
-
-            {/* Network sliders */}
-            <p className="text-xs text-slate-600 uppercase tracking-wider mb-2 mt-3">
-              Network
-            </p>
-
-            <SliderRow
-              label="Stabilize interval"
-              value={stabilizeIntervalMs}
-              min={100}
-              max={2000}
-              step={100}
-              format={(v) => `${v} ms`}
-              onChange={(v) => {
-                setStabilizeIntervalMs(v);
-                sendConfig({ stabilizeIntervalMs: v });
-              }}
-            />
-            <SliderRow
-              label="Simulated delay"
-              value={simDelayMs}
-              min={0}
-              max={500}
-              step={10}
-              format={(v) => `${v} ms`}
-              onChange={(v) => {
-                setSimDelayMs(v);
-                sendConfig({ simDelayMs: v });
-              }}
-            />
-            <SliderRow
-              label="Packet loss rate"
-              value={simLossRate}
-              min={0}
-              max={50}
-              step={1}
-              format={(v) => `${v}%`}
-              onChange={(v) => {
-                setSimLossRate(v);
-                sendConfig({ simLossRate: v / 100 });
-              }}
-            />
-
             {configMut.isError && (
               <p className="text-xs text-red-400 mt-1">Failed to update config</p>
             )}
