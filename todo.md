@@ -149,3 +149,16 @@ Status: `[ ]` = pending, `[x]` = done.
 Notable fixes along the way:
 - **B-23**: Refactored into shared `iterativeSearch(roundFn)` in `internal/kademlia/lookup.go`
 - **X-10**: Also fixed `runScenario` context bug — was using `c.Request.Context()` which cancelled on HTTP response; changed to `context.Background()` for detached background goroutines
+
+---
+
+## PROJECT HARDENING — Post-Audit Engineering Work
+
+Status: `[ ]` = pending, `[x]` = done.
+
+- [x] **P3-01** Enforce frontend quality gates in CI (`#129`) — add GitHub Actions coverage for frontend lint, unit tests, and Playwright E2E.
+- [ ] **P3-02** Eliminate GitHub Actions Node 20 deprecation warnings (`#130`) — move workflows onto the Node 24 compatibility path and standardize the frontend job runtime.
+- [ ] **P3-03** Add automated dependency update policy (`#131`) — add Dependabot coverage for Go modules, npm, and GitHub Actions.
+- [ ] **P3-04** Add security scanning for Go and frontend dependencies (`#132`) — wire `govulncheck` and frontend dependency auditing into CI.
+- [ ] **P3-05** Validate deployment assets in CI (`#135`) — prove `docker compose` and `nginx.conf` stay valid on every change.
+- [ ] **P3-06** Add benchmark workflow for repeatable performance regression tracking (`#136`) — separate performance-oriented simulation tests from correctness CI.
