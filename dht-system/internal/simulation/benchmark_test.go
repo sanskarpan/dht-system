@@ -188,6 +188,10 @@ func TestRingStabilizesWithin3s(t *testing.T) {
 
 // TestKeyMigrationSpeed verifies that 10k keys migrate quickly when a node joins.
 func TestKeyMigrationSpeed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping migration benchmark in short mode")
+	}
+
 	const (
 		initialNodes = 5
 		keyCount     = 1000 // reduced from 10k for test speed
