@@ -162,3 +162,4 @@ Status: `[ ]` = pending, `[x]` = done.
 - [x] **P3-04** Add security scanning for Go and frontend dependencies (`#132`) — wire `govulncheck` and frontend dependency auditing into CI.
 - [x] **P3-05** Validate deployment assets in CI (`#135`) — prove `docker compose` and `nginx.conf` stay valid on every change.
 - [x] **P3-06** Add benchmark workflow for repeatable performance regression tracking (`#136`) — separate performance-oriented simulation tests from correctness CI.
+- [x] **P3-07** Upgrade GitHub Actions dependencies to Node 24-native major versions (`#152`) — move workflow actions onto the current major line so the runner warnings disappear.
