@@ -47,7 +47,9 @@ jobs:
       - name: Run Go tests with race detector
         # frontend/ is a separate Go module boundary, so this job only walks
         # project-owned Go packages and avoids node_modules helper packages.
-        run: go test -race ./...
+        # Race CI is for correctness; short mode skips performance-bound tests
+        # whose wall-clock thresholds are not meaningful under instrumentation.
+        run: go test -race -short ./...
 
   frontend-build:
     name: Frontend build
