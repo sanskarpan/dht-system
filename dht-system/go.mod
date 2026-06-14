@@ -3,7 +3,7 @@ module github.com/sanskarpan/dht-system/dht-system
 go 1.25.0
 
 require (
-	github.com/dgraph-io/badger/v4 v4.9.1
+	github.com/dgraph-io/badger/v4 v4.9.2
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/prometheus/client_golang v1.23.2
